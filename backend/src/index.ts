@@ -4,10 +4,10 @@ import path from 'path';
 import { getSettings, setSetting, getExclusions, addExclusion, removeExclusion, getStorages } from './db';
 import { getDiskStatus } from './services/disk.service';
 import { testConnection } from './services/test.service';
-import { getMappingPaths as getPlexMappingPaths } from './services/plex.service';
 import { getMappingPaths as getRadarrMappingPaths } from './services/radarr.service';
 import { getMappingPaths as getSonarrMappingPaths } from './services/sonarr.service';
 import { getMappingPaths as getJellyfinMappingPaths } from './services/jellyfin.service';
+import { getPlexPin, getPlexToken, getPlexResources, getMappingPaths as getPlexMappingPaths } from './services/plex.service';
 import { startDeletionJob, deletionQueue, removeFromQueue, refreshQueue, deleteItem } from './jobs/deletion.job';
 
 const app = express();
@@ -55,6 +55,35 @@ app.get('/api/paths/radarr', async (req, res) => {
 
 app.get('/api/paths/sonarr', async (req, res) => {
   res.json(await getSonarrMappingPaths(req.query.url as string, req.query.apiKey as string));
+});
+
+app.get('/api/plex/auth/pin', async (req, res) => {
+  try {
+    const pin = await getPlexPin();
+    res.json(pin);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/plex/auth/token/:pinId', async (req, res) => {
+  try {
+    const token = await getPlexToken(parseInt(req.params.pinId));
+    res.json({ token });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/plex/auth/resources', async (req, res) => {
+  try {
+    const token = req.query.token as string;
+    if (!token) return res.status(400).json({ error: 'Missing token' });
+    const resources = await getPlexResources(token);
+    res.json(resources);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // --- Exclusions API ---

@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef } from 'react';
 import axios from 'axios';
-import { Settings as SettingsIcon, Save, Server, Shield, HardDrive, CheckCircle2, XCircle, Loader2, Trash } from 'lucide-react';
+import { Settings as SettingsIcon, Save, Server, Shield, HardDrive, CheckCircle2, XCircle, Loader2, Trash, HelpCircle, ExternalLink } from 'lucide-react';
 
 const InputGroup = ({ 
   label, 
@@ -12,7 +12,9 @@ const InputGroup = ({
   list,
   options,
   onFocus,
-  className
+  className,
+  helpUrl,
+  disabled
 }: { 
   label: string; 
   name: string; 
@@ -24,6 +26,8 @@ const InputGroup = ({
   options?: string[];
   onFocus?: () => void;
   className?: string;
+  helpUrl?: string;
+  disabled?: boolean;
 }) => {
   const [showDropdown, setShowDropdown] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -40,7 +44,20 @@ const InputGroup = ({
 
   return (
     <div className={`flex flex-col gap-1.5 relative ${className}`} ref={containerRef}>
-      <label className="text-sm font-medium text-slate-400">{label}</label>
+      <div className="flex items-center gap-2">
+        <label className="text-sm font-medium text-slate-400">{label}</label>
+        {helpUrl && (
+          <a 
+            href={helpUrl} 
+            target="_blank" 
+            rel="noopener noreferrer"
+            className="text-slate-500 hover:text-cyan-400 transition-colors"
+            title="How to find this?"
+          >
+            <HelpCircle className="w-4 h-4" />
+          </a>
+        )}
+      </div>
       <input 
         type={type} 
         name={name} 
@@ -52,7 +69,8 @@ const InputGroup = ({
           onFocus?.();
         }}
         autoComplete="off"
-        className="px-4 py-2.5 bg-slate-900 border border-slate-700/50 rounded-lg text-slate-200 focus:outline-none focus:ring-2 focus:ring-cyan-500/50 focus:border-cyan-500 transition-all font-mono text-sm placeholder:text-slate-600 w-full"
+        className={`px-4 py-2.5 bg-slate-900 border border-slate-700/50 rounded-lg text-slate-200 focus:outline-none focus:ring-2 focus:ring-cyan-500/50 focus:border-cyan-500 transition-all font-mono text-sm placeholder:text-slate-600 w-full ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
+        disabled={disabled}
       />
       {list && options && showDropdown && options.length > 0 && (
         <div className="absolute top-[calc(100%+4px)] left-0 right-0 bg-slate-800 border border-slate-700 rounded-lg shadow-2xl max-h-48 overflow-y-auto overflow-x-hidden animate-in fade-in slide-in-from-top-2 duration-200">
@@ -130,6 +148,7 @@ export default function Settings() {
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState('');
   const [testStatus, setTestStatus] = useState<Record<string, 'idle' | 'testing' | 'success' | 'failed'>>({});
+  const [plexAuthLoading, setPlexAuthLoading] = useState(false);
 
   useEffect(() => {
     fetchData();
@@ -224,6 +243,57 @@ export default function Settings() {
       }
     } catch {
       setTestStatus(prev => ({ ...prev, [service]: 'failed' }));
+    }
+  }
+
+  async function handlePlexLogin() {
+    setPlexAuthLoading(true);
+    try {
+      const pinRes = await axios.get('/api/plex/auth/pin');
+      const { id, code } = pinRes.data;
+
+      const authUrl = `https://app.plex.tv/auth/#!?clientID=Kirby-Media-Manager-Auth&code=${code}&context[device][product]=Kirby&context[device][platform]=Web&context[device][device]=Kirby%20Web`;
+      const width = 600;
+      const height = 700;
+      const left = window.screenX + (window.outerWidth - width) / 2;
+      const top = window.screenY + (window.outerHeight - height) / 2;
+      
+      const popup = window.open(authUrl, 'Plex Auth', `width=${width},height=${height},left=${left},top=${top}`);
+
+      const pollInterval = setInterval(async () => {
+        try {
+          const tokenRes = await axios.get(`/api/plex/auth/token/${id}`);
+          if (tokenRes.data.token) {
+            const token = tokenRes.data.token;
+            clearInterval(pollInterval);
+            setSettings(prev => ({ ...prev, plexToken: token }));
+            
+            // Fetch resources
+            try {
+              await axios.get(`/api/plex/auth/resources?token=${token}`);
+            } catch (err) {
+              console.error('[Plex] Resource fetch failed:', err);
+            }
+
+            setPlexAuthLoading(false);
+            if (popup) popup.close();
+            setMsg('Plex authenticated! Please select your server.');
+            setTimeout(() => setMsg(''), 5000);
+          }
+        } catch (err) {
+          console.error('[Plex] Polling error:', err);
+        }
+      }, 2000);
+
+      // Stop polling after 10 minutes
+      setTimeout(() => {
+        clearInterval(pollInterval);
+        setPlexAuthLoading(false);
+      }, 10 * 60 * 1000);
+
+    } catch (err) {
+      console.error('[Plex] Login failed:', err);
+      setPlexAuthLoading(false);
     }
   }
 
@@ -402,15 +472,43 @@ export default function Settings() {
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
             <div className="space-y-4">
                <h4 className="font-medium text-slate-300 border-b border-slate-700 pb-2">Plex Integration</h4>
-               <InputGroup label="Plex URL" name="plexUrl" value={settings.plexUrl} onChange={handleChange} placeholder="http://192.168.1.100:32400" />
-               <InputGroup label="Plex Token" name="plexToken" value={settings.plexToken} onChange={handleChange} type="password" />
-               <InputGroup label="Plex Public URL" name="plexPublicUrl" value={settings.plexPublicUrl} onChange={handleChange} placeholder="http://[IP_ADDRESS]" />
+                <InputGroup label="Plex URL" name="plexUrl" value={settings.plexUrl} onChange={handleChange} placeholder="http://192.168.1.100:32400" />
+                <div className="flex flex-col gap-2">
+                  <InputGroup 
+                    label="Plex Token" 
+                    name="plexToken" 
+                    value={settings.plexToken} 
+                    onChange={handleChange} 
+                    type="password" 
+                    helpUrl="https://support.plex.tv/articles/204059436-finding-an-authentication-token-x-plex-token/"
+                    disabled
+                  />
+                  <button
+                    onClick={handlePlexLogin}
+                    disabled={plexAuthLoading}
+                    className="flex items-center justify-center gap-2 px-4 py-2 bg-slate-700 hover:bg-slate-600 text-slate-200 rounded-lg text-sm font-semibold transition-all border border-slate-600 hover:border-cyan-500/50 group"
+                  >
+                    {plexAuthLoading ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <ExternalLink className="w-4 h-4 text-slate-400 group-hover:text-cyan-400" />
+                    )}
+                    Login with Plex
+                  </button>
+                </div>
+                <InputGroup label="Plex Public URL" name="plexPublicUrl" value={settings.plexPublicUrl} onChange={handleChange} placeholder="http://[IP_ADDRESS]" />
                <TestButton service="plex" status={testStatus['plex'] || 'idle'} onTest={handleTest} />
             </div>
             <div className="space-y-4">
                <h4 className="font-medium text-slate-300 border-b border-slate-700 pb-2">Jellyfin Integration</h4>
                <InputGroup label="Jellyfin URL" name="jellyfinUrl" value={settings.jellyfinUrl} onChange={handleChange} placeholder="http://192.168.50.1:8096" />
-               <InputGroup label="Jellyfin API Key" name="jellyfinApiKey" value={settings.jellyfinApiKey} onChange={handleChange} type="password" />
+               <InputGroup 
+                  label="Jellyfin API Key" 
+                  name="jellyfinApiKey" 
+                  value={settings.jellyfinApiKey} 
+                  onChange={handleChange} 
+                  type="password" 
+                />
                <InputGroup label="Jellyfin Public URL" name="jellyfinPublicUrl" value={settings.jellyfinPublicUrl} onChange={handleChange} placeholder="http://[IP_ADDRESS]" />
                <TestButton service="jellyfin" status={testStatus['jellyfin'] || 'idle'} onTest={handleTest} />
             </div>

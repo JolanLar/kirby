@@ -6,6 +6,7 @@ export async function testConnection(service: string, config: any): Promise<{ su
       const res = await axios.get(`${config.url}/library/sections`, {
         headers: {
           'X-Plex-Token': config.token,
+          'X-Plex-Client-Identifier': 'Kirby-Media-Manager-Auth',
           'Accept': 'application/json'
         },
         timeout: 5000

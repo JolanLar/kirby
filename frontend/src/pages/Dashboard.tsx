@@ -1,0 +1,455 @@
+import { useEffect, useState, useCallback, useRef } from 'react';
+import axios from 'axios';
+import { HardDrive, AlertTriangle, ShieldBan, RefreshCw, Trash, Loader2, Search, ChevronLeft, ChevronRight, ListFilter, ChevronsLeft, ChevronsRight } from 'lucide-react';
+
+interface DiskStatus {
+  storageId: string;
+  name: string;
+  freeBytes: number;
+  error?: string;
+}
+
+interface MediaItem {
+  plexId?: string;
+  jellyfinId?: string;
+  tmdbId: string;
+  title: string;
+  type: 'movie' | 'show';
+  lastSeenAt: number;
+  posterUrl: string;
+  sizeOnDisk: number;
+  deleting?: boolean;
+}
+
+interface StorageConfig {
+  id: string;
+  name: string;
+  targetFreeSpace: number;
+}
+
+export default function Dashboard() {
+  const [diskStatuses, setDiskStatuses] = useState<DiskStatus[]>([]);
+  const [queues, setQueues] = useState<Record<string, MediaItem[]>>({});
+  const [storageConfigs, setStorageConfigs] = useState<StorageConfig[]>([]);
+  const [activeTab, setActiveTab] = useState<string>('');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(48);
+
+  const disableAutoRefresh = useRef(false);
+  const pendingOperations = useRef(0);
+  const deletedRef = useRef<Set<string>>(new Set());
+  const isRefreshingRef = useRef(false);
+  
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const fetchData = useCallback(async () => {
+    try {
+      const dbRes = await axios.get('/api/status');
+      setDiskStatuses(dbRes.data.storages || []);
+      
+      const qRes = await axios.get('/api/deletion-queue');
+      // Set the queues without data in the tmpExclusions, keeping local state like "deleting" and hiding completely removed items
+      setQueues(prev => {
+        const newQueues: Record<string, MediaItem[]> = {};
+        for (const storageId in qRes.data) {
+          newQueues[storageId] = qRes.data[storageId]
+            .filter((item: MediaItem) => !deletedRef.current.has(item.tmdbId))
+            .map((newItem: MediaItem) => {
+              const oldItem = prev[storageId]?.find(i => i.tmdbId === newItem.tmdbId);
+              if (oldItem?.deleting) {
+                return { ...newItem, deleting: true };
+              }
+              return newItem;
+            });
+        }
+        return newQueues;
+      });
+      
+      const sRes = await axios.get('/api/settings');
+      if (sRes.data.storages) {
+        try {
+          const parsed = JSON.parse(sRes.data.storages) as StorageConfig[];
+          setStorageConfigs(parsed);
+          setActiveTab(prev => (prev || (parsed.length > 0 ? parsed[0].id : '')));
+        } catch (e) {
+          console.error("Failed to parse storage configs:", e);
+          setStorageConfigs([]);
+          setActiveTab('');
+        }
+      } else {
+        setStorageConfigs([]);
+        setActiveTab('');
+      }
+      setLoading(false);
+    } catch (err) {
+      console.error(err);
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    const init = async () => {
+      await fetchData();
+    };
+    init();
+    const interval = setInterval(() => {if (!disableAutoRefresh.current) fetchData()}, 10000); // refresh every 10s
+    return () => {
+      clearInterval(interval);
+    };
+  }, [fetchData]);
+
+  function removeItemFromQueues(item: MediaItem) {
+    setQueues(prev => {
+      const newQueues = { ...prev };
+      newQueues[activeTab] = newQueues[activeTab].filter(i => i.tmdbId !== item.tmdbId);
+      return newQueues;
+    });
+  }
+
+  async function excludeItem(item: MediaItem) {
+    pendingOperations.current += 1;
+    disableAutoRefresh.current = true;
+    try {
+      removeItemFromQueues(item);
+      await axios.post('/api/exclusions', {
+        tmdbId: item.tmdbId,
+        title: item.title,
+        type: item.type,
+        posterUrl: item.posterUrl,
+        lastSeenAt: item.lastSeenAt
+      });
+      deletedRef.current.add(item.tmdbId);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      pendingOperations.current -= 1;
+      if (pendingOperations.current === 0) {
+        disableAutoRefresh.current = false;
+        handleRefresh();
+      }
+    }
+  }
+
+  async function deleteItem(item: MediaItem) {
+    setQueues(prev => {
+      const newQueues = { ...prev };
+      newQueues[activeTab] = newQueues[activeTab].map(i => i.tmdbId === item.tmdbId ? { ...i, deleting: true } : i);
+      return newQueues;
+    });
+    pendingOperations.current += 1;
+    disableAutoRefresh.current = true;
+    try {
+      await axios.post('/api/delete', {
+        plexId: item.plexId,
+        jellyfinId: item.jellyfinId,
+        tmdbId: item.tmdbId,
+        title: item.title,
+        type: item.type,
+        lastSeenAt: item.lastSeenAt,
+        posterUrl: item.posterUrl,
+        sizeOnDisk: item.sizeOnDisk
+      });
+      deletedRef.current.add(item.tmdbId);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      pendingOperations.current -= 1;
+      if (pendingOperations.current === 0) {
+        disableAutoRefresh.current = false;
+        handleRefresh();
+      }
+    }
+  }
+
+  async function handleRefresh() {
+    if (isRefreshingRef.current) return;
+    isRefreshingRef.current = true;
+    setRefreshing(true);
+    try {
+      await axios.post('/api/refresh');
+      await fetchData();
+    } catch (err) {
+      console.error(err);
+    } finally {
+      isRefreshingRef.current = false;
+      setRefreshing(false);
+    }
+  }
+
+  if (loading) {
+    return (
+      <div className="flex justify-center items-center h-full">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-cyan-400"></div>
+      </div>
+    );
+  }
+
+  if (storageConfigs.length === 0) {
+    return (
+      <div className="max-w-7xl mx-auto text-center py-20 text-slate-400">
+        <p className="mb-4">No storages configured.</p>
+        <p>Please head over to Settings to configure your Path Mappings and target free space limits.</p>
+      </div>
+    );
+  }
+
+  const activeConfig = storageConfigs.find(s => s.id === activeTab) || storageConfigs[0];
+  const activeDisk = diskStatuses.find(d => d.storageId === activeConfig.id);
+  const activeQueue = queues[activeConfig.id] || [];
+  
+  const targetFreeSpace = activeConfig?.targetFreeSpace || 100;
+  const isExceeded = (activeDisk?.freeBytes ?? 0) < targetFreeSpace;
+
+  const filteredQueue = activeQueue.filter(item => 
+    item.title.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
+  const totalPages = Math.max(1, Math.ceil(filteredQueue.length / pageSize));
+  const validPage = Math.min(currentPage, totalPages);
+  const startIndex = (validPage - 1) * pageSize;
+  const paginatedQueue = filteredQueue.slice(startIndex, startIndex + pageSize);
+
+  return (
+    <div className="max-w-7xl mx-auto space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500 pb-12">
+      <header className="mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h2 className="text-3xl font-bold bg-linear-to-r from-white to-slate-400 bg-clip-text text-transparent">Overview</h2>
+          <p className="text-slate-400 mt-1">Monitor disk space and upcoming deletions per storage.</p>
+        </div>
+        <button 
+          onClick={handleRefresh} 
+          disabled={refreshing}
+          className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg transition-all duration-300 border border-slate-700 flex items-center gap-2 hover:border-cyan-500/50 hover:shadow-[0_0_15px_rgba(34,211,238,0.15)] disabled:opacity-50 w-fit"
+        >
+          <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin text-cyan-400' : ''}`} />
+          <span className="text-sm font-semibold">Sync Now</span>
+        </button>
+      </header>
+
+      {/* Tabs */}
+      <div className="flex overflow-x-auto gap-2 border-b border-slate-800 pb-2 custom-scrollbar">
+        {storageConfigs.map(storage => (
+          <button
+            key={storage.id}
+            onClick={() => {
+              setActiveTab(storage.id);
+              setCurrentPage(1);
+              setSearchQuery('');
+            }}
+            className={`px-5 py-2.5 rounded-t-lg font-semibold text-sm transition-all whitespace-nowrap ${
+              activeTab === storage.id 
+                ? 'bg-cyan-500/20 text-cyan-400 border-b-2 border-cyan-400' 
+                : 'text-slate-400 hover:bg-slate-800/50 hover:text-slate-200'
+            }`}
+          >
+            {storage.name}
+          </button>
+        ))}
+      </div>
+
+      {!activeDisk && (
+        <div className="text-slate-500 p-8 text-center bg-slate-900 rounded-xl border border-slate-800">
+           Failed to load disk status for this storage or no disk found yet. Ensure paths are correctly mapped.
+        </div>
+      )}
+
+      {/* Disk Widget */}
+      {activeDisk && (
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 animate-in fade-in">
+          <div className="col-span-1 md:col-span-2 bg-slate-800/50 backdrop-blur-md rounded-2xl p-6 border border-slate-700/50 shadow-xl relative overflow-hidden group">
+            <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+               <HardDrive className="w-32 h-32" />
+            </div>
+            <div className="relative z-10 flex items-center justify-between mb-8">
+               <h3 className="text-xl font-semibold text-slate-200">{activeConfig.name} Saturation</h3>
+               <span className={`px-3 py-1 text-sm font-bold rounded-full ${isExceeded ? 'bg-red-500/20 text-red-400' : 'bg-emerald-500/20 text-emerald-400'}`}>
+                  {isExceeded ? 'Critical' : 'Healthy'}
+               </span>
+            </div>
+            
+            <div className="relative z-10">
+              <div className="flex justify-between text-sm mb-2">
+                <span className="text-slate-400">{activeDisk.freeBytes.toFixed(2)} GB free</span>
+              </div>
+              <div className="h-4 w-full bg-slate-900 rounded-full overflow-hidden">
+                <div 
+                  className={`h-full transition-all duration-1000 ${isExceeded ? 'bg-red-500 shadow-[0_0_15px_rgba(239,68,68,0.5)]' : 'bg-cyan-500 shadow-[0_0_15px_rgba(34,211,238,0.5)]'}`}
+                  style={{ width: `${Math.max(targetFreeSpace - activeDisk.freeBytes, 0)}%` }}
+                ></div>
+              </div>
+              <div className="mt-4 flex items-center justify-end gap-2 text-slate-300">
+                 <AlertTriangle className="w-4 h-4 text-orange-400" />
+                 <span>Target limit: <span className="font-mono font-bold">{targetFreeSpace} GB</span></span>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-slate-800/50 backdrop-blur-md rounded-2xl p-6 border border-slate-700/50 shadow-xl flex flex-col justify-center items-center text-center">
+              <div className="w-16 h-16 rounded-full bg-cyan-500/10 flex items-center justify-center mb-4 shadow-[0_0_30px_rgba(34,211,238,0.2)]">
+                 <span className="text-2xl font-bold text-cyan-400">{activeQueue.length}</span>
+              </div>
+              <h3 className="font-semibold text-slate-200">Pending Deletions</h3>
+              <p className="text-sm text-slate-400 mt-2">Oldest medias queued for removal on this storage when limit is reached.</p>
+          </div>
+        </div>
+      )}
+
+      {/* Queue */}
+      {activeConfig && (
+        <div className="bg-slate-800/50 backdrop-blur-md rounded-2xl p-6 border border-slate-700/50 shadow-xl flex flex-col gap-6">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <h3 className="text-xl font-semibold flex items-center gap-2">
+               Deletion Queue
+               <span className="text-xs font-normal px-2 py-1 bg-slate-900 rounded-md text-slate-400">Total: {filteredQueue.length}</span>
+            </h3>
+
+            <div className="flex flex-wrap items-center gap-3">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                <input
+                  type="text"
+                  placeholder="Search media..."
+                  value={searchQuery}
+                  onChange={(e) => {
+                    setSearchQuery(e.target.value);
+                    setCurrentPage(1);
+                  }}
+                  className="pl-9 pr-4 py-2 bg-slate-900/50 border border-slate-700 rounded-lg text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 transition-all w-full sm:w-64"
+                />
+              </div>
+              
+              <div className="flex items-center gap-2 bg-slate-900/50 border border-slate-700 rounded-lg px-3 py-2">
+                <ListFilter className="w-4 h-4 text-slate-400" />
+                <select
+                  value={pageSize}
+                  onChange={(e) => {
+                    setPageSize(Number(e.target.value));
+                    setCurrentPage(1);
+                  }}
+                  className="bg-transparent text-sm text-slate-300 focus:outline-none cursor-pointer"
+                >
+                  <option value={24}>24 per page</option>
+                  <option value={48}>48 per page</option>
+                  <option value={96}>96 per page</option>
+                  <option value={999999}>All</option>
+                </select>
+              </div>
+            </div>
+          </div>
+          
+          {filteredQueue.length === 0 ? (
+            <div className="text-center py-12 text-slate-500">
+               {activeQueue.length === 0 
+                 ? "No media items identified for this storage block. Ensure Jellyfin/Plex is configured properly and paths match."
+                 : "No media items match your search."}
+            </div>
+          ) : (
+            <>
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
+                {paginatedQueue.map((item, idx) => (
+                  <div key={item.tmdbId} className="group relative bg-slate-900 rounded-xl overflow-hidden hover:shadow-[0_0_20px_rgba(34,211,238,0.15)] transition-all duration-300 hover:-translate-y-1 border border-slate-800 hover:border-cyan-500/30">
+                    <div className="aspect-2/3 w-full relative overflow-hidden bg-slate-800">
+                      {item.posterUrl ? (
+                        <img src={item.posterUrl} alt={item.title} className={`w-full h-full object-cover group-hover:scale-105 transition-transform duration-500 ${item.deleting ? 'opacity-30' : ''}`} />
+                      ) : (
+                        <div className="w-full h-full flex flex-col items-center justify-center p-4 text-center">
+                           <span className="text-slate-600 text-sm font-medium">{item.title}</span>
+                        </div>
+                      )}
+                      
+                      {item.deleting && (
+                        <div className="absolute inset-0 flex items-center justify-center z-20">
+                          <Loader2 className="w-12 h-12 text-cyan-400 animate-spin drop-shadow-[0_0_15px_rgba(34,211,238,0.5)]" />
+                        </div>
+                      )}
+                      
+                      {/* Overlay */}
+                      <div className="absolute inset-0 bg-linear-to-t from-black/90 via-black/40 to-transparent opacity-80" />
+                      
+                      {/* Rank tag */}
+                      <div className="absolute top-2 left-2 px-2 py-1 bg-black/60 backdrop-blur-md rounded text-xs font-mono font-bold text-cyan-400">
+                        #{startIndex + idx + 1}
+                      </div>
+
+                      {/* Actions */}
+                      <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity flex gap-2">
+                        <button 
+                          onClick={() => excludeItem(item)}
+                          title="Exclude from deletion" 
+                          className="p-2 bg-orange-500/80 hover:bg-orange-500 text-white rounded-lg backdrop-blur-sm transition-colors shadow-lg"
+                        >
+                          <ShieldBan className="w-4 h-4" />
+                        </button>
+                        <button 
+                          onClick={() => deleteItem(item)}
+                          title="Delete item" 
+                          className={`p-2 bg-red-500/80 hover:bg-red-500 text-white rounded-lg backdrop-blur-sm transition-colors shadow-lg ${item.deleting ? 'cursor-not-allowed' : 'cursor-pointer'}`}
+                        >
+                          {item.deleting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash className="w-4 h-4" />}
+                        </button>
+                      </div>
+                      
+                      {/* Info */}
+                      <div className="absolute bottom-0 left-0 right-0 p-3 translate-y-2 group-hover:translate-y-0 transition-transform">
+                        <h4 className="font-bold text-sm text-balance line-clamp-2 leading-tight drop-shadow-md">{item.title}</h4>
+                        <p className="text-xs text-slate-400 font-mono mt-1">Seen: {new Date(item.lastSeenAt).toLocaleDateString()}</p>
+                        <div className="flex items-center gap-1 mt-1.5">
+                          <span className={`text-[10px] uppercase font-bold px-1.5 py-0.5 rounded bg-slate-700/80 ${item.type === 'movie' ? 'text-blue-300' : 'text-purple-300'}`}>{item.type}</span>
+                          <span className={`text-[10px] uppercase font-bold px-1.5 py-0.5 rounded bg-slate-700/80 ${item.sizeOnDisk != 0 ? 'text-green-300' : 'text-red-300'}`}>{(item.sizeOnDisk / 1e9).toFixed(2)} GB</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {totalPages > 1 && (
+                <div className="flex items-center justify-between border-t border-slate-800/50 pt-4 mt-6">
+                  <div className="text-sm text-slate-400">
+                    Showing <span className="font-semibold text-slate-300">{startIndex + 1}</span> to <span className="font-semibold text-slate-300">{Math.min(startIndex + pageSize, filteredQueue.length)}</span> of <span className="font-semibold text-slate-300">{filteredQueue.length}</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => setCurrentPage(1)}
+                      disabled={validPage === 1}
+                      className="p-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-400 hover:text-slate-200 hover:border-slate-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                    >
+                      <ChevronsLeft className="w-4 h-4" />
+                    </button>
+                    <button
+                      onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                      disabled={validPage === 1}
+                      className="p-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-400 hover:text-slate-200 hover:border-slate-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                    >
+                      <ChevronLeft className="w-4 h-4" />
+                    </button>
+                    <div className="px-4 py-1.5 rounded-lg bg-slate-900 border border-slate-700 text-sm font-medium text-slate-300">
+                      Page {validPage} of {totalPages}
+                    </div>
+                    <button
+                      onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                      disabled={validPage === totalPages}
+                      className="p-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-400 hover:text-slate-200 hover:border-slate-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                    >
+                      <ChevronRight className="w-4 h-4" />
+                    </button>
+                    <button
+                      onClick={() => setCurrentPage(totalPages)}
+                      disabled={validPage === totalPages}
+                      className="p-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-400 hover:text-slate-200 hover:border-slate-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                    >
+                      <ChevronsRight className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      )}
+
+    </div>
+  );
+}

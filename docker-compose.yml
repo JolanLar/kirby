@@ -1,0 +1,12 @@
+services:
+  kirby:
+    image: jolanl/kirby:latest
+    container_name: kirby
+    restart: unless-stopped
+    ports:
+      - "4000:4000"
+    volumes:
+      - ./config:/app/backend/data
+    environment:
+      - PORT=4000
+      - TZ=Europe/Paris

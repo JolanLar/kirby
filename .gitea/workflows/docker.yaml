@@ -1,0 +1,28 @@
+name: ci
+
+on:
+  push:
+
+jobs:
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+        with:
+          buildkitd-config-inline: |
+            [registry."registry:5000"]
+              http = true
+          driver-opts: network=traefik_default
+
+      - name: Build and push to local registry
+        uses: docker/build-push-action@v6
+        with:
+          push: true
+          tags: registry:5000/kirby:latest
+          cache-from: type=registry,ref=registry:5000/kirby:cache
+          cache-to: type=registry,ref=registry:5000/kirby:cache,mode=max
+
+      - name: Inspect
+        run: |
+          docker pull registry:5000/kirby:latest

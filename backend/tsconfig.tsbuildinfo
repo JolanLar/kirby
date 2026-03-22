@@ -1,0 +1,1 @@
+{"root":["./src/db.ts","./src/index.ts","./src/models.ts","./src/jobs/deletion.job.ts","./src/services/disk.service.ts","./src/services/jellyfin.service.ts","./src/services/plex.service.ts","./src/services/qbittorrent.service.ts","./src/services/radarr.service.ts","./src/services/sonarr.service.ts"],"version":"5.9.3"}

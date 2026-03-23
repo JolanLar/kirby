@@ -83,6 +83,7 @@ export async function deletePlexItem(plexId: string): Promise<boolean> {
       }
     });
 
+    console.log(`[Plex] Deleting item (ID: ${plexId})...`);
     await client.delete(`/library/metadata/${plexId}`);
     return true;
   } catch (err: any) {

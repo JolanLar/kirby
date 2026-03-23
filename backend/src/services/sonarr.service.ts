@@ -28,19 +28,8 @@ export async function getShowsFromSonarr(): Promise<SonarrSeries[]> {
   }
 }
 
-export async function deleteShowFromSonarr(item: MediaItem): Promise<boolean> {
+export async function deleteShowFromSonarr(serie: SonarrSeries): Promise<boolean> {
   try {
-    const series = await getShowsFromSonarr();
-
-    // Find by tmdbid
-    let foundSeries = series.find((s: any) => s.tmdbId === Number(item.tmdbId));
-
-    if (!foundSeries) {
-      console.log(`[Sonarr] Series not found: ${item.title}`);
-      return false;
-    }
-
-    console.log(`[Sonarr] Found series ${foundSeries.title} (ID: ${foundSeries.id}). Deleting...`);
     // Delete series and its files
     const url = getSetting('sonarrUrl');
     const apiKey = getSetting('sonarrApiKey');
@@ -48,23 +37,31 @@ export async function deleteShowFromSonarr(item: MediaItem): Promise<boolean> {
       baseURL: url,
       headers: { 'X-Api-Key': apiKey }
     });
-    await client.delete(`/api/v3/series/${foundSeries.id}?deleteFiles=true`);
+    await client.delete(`/api/v3/series/${serie.id}?deleteFiles=true`);
+    console.log(`[Sonarr] Serie ${serie.title} (ID: ${serie.id}) deleted.`);
     return true;
   } catch (err: any) {
-    console.error(`[Sonarr] Error deleting series: ${err.message}`);
+    console.error(`[Sonarr] Error deleting serie ${serie.title} (tmdbId: ${serie.tmdbId}): ${err.message}`);
     return false;
   }
 }
 
-// Get downloads IDs from history
-export async function getDownloadIdsFromSonarr(item: MediaItem): Promise<string[]> {
+export async function searchSonarrSerie(item: MediaItem): Promise<SonarrSeries|undefined> {
   try {
     const series = await getShowsFromSonarr();
     let foundSeries = series.find((s: any) => s.tmdbId === Number(item.tmdbId));
-    if (!foundSeries) {
-      console.log(`[Sonarr] Series not found: ${item.title}`);
-      return [];
-    }
+    if (!foundSeries)
+      console.error(`[Sonarr] Error finding serie (tmdbId: ${item.tmdbId}): missing from sonarr instance`);
+    return foundSeries
+  } catch (err: any) {
+    console.error(`[Sonarr] Error finding serie (tmdbId: ${item.tmdbId}): ${err.message}`);
+    return undefined
+  }
+}
+
+// Get downloads IDs from history
+export async function getDownloadIdsFromSonarr(serie: SonarrSeries): Promise<string[]> {
+  try {
     const url = getSetting('sonarrUrl');
     const apiKey = getSetting('sonarrApiKey');
     if (!url || !apiKey) {
@@ -75,7 +72,7 @@ export async function getDownloadIdsFromSonarr(item: MediaItem): Promise<string[
       baseURL: url,
       headers: { 'X-Api-Key': apiKey }
     });
-    const res = await client.get(`/api/v3/history/series?seriesId=${foundSeries.id}`);
+    const res = await client.get(`/api/v3/history/series?seriesId=${serie.id}`);
     const episodes = res.data.episodes;
     return [...new Set(episodes.map((e: any) => e.downloadId).filter((id: string) => id))] as string[];
   } catch (err: any) {

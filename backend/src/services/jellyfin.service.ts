@@ -101,6 +101,7 @@ export async function deleteJellyfinItem(itemId: string): Promise<boolean> {
       }
     });
 
+    console.log(`[Jellyfin] Deleting item (ID: ${itemId})...`);
     await client.delete(`/Items/${itemId}`);
     return true;
   } catch (err: any) {

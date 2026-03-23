@@ -1,8 +1,8 @@
 import { getDiskStatus } from '../services/disk.service';
 import { getPlexItems, deletePlexItem } from '../services/plex.service';
 import { getJellyfinItems, deleteJellyfinItem } from '../services/jellyfin.service';
-import { deleteMovieFromRadarr, getMoviesFromRadarr, getDownloadIdsFromRadarr } from '../services/radarr.service';
-import { deleteShowFromSonarr, getShowsFromSonarr, getDownloadIdsFromSonarr } from '../services/sonarr.service';
+import { deleteMovieFromRadarr, getMoviesFromRadarr, searchRadarrMovie, getDownloadIdsFromRadarr } from '../services/radarr.service';
+import { deleteShowFromSonarr, getShowsFromSonarr, searchSonarrSerie, getDownloadIdsFromSonarr } from '../services/sonarr.service';
 import { deleteFromQBittorrent } from '../services/qbittorrent.service';
 import { isExcluded, getStorages, recordDeletion, getDeleteHistoryCounts, getSetting, addExclusion } from '../db';
 import { MediaItem } from '../models';
@@ -168,19 +168,21 @@ export async function processDeletion() {
 }
 
 export async function deleteItem(item: MediaItem) {
-      let deleted = false;
-      
-      const hashes = item.type === 'show' ? await getDownloadIdsFromSonarr(item) : await getDownloadIdsFromRadarr(item);
-      for (const hash of hashes) {
-        await deleteFromQBittorrent(hash);
-      }
-
       if (item.type === 'show') {
-         deleted = await deleteShowFromSonarr(item);
+        const serie = await searchSonarrSerie(item);
+        if (serie) {
+          const hashes = await getDownloadIdsFromSonarr(serie);
+          hashes.forEach(await deleteFromQBittorrent)
+          await deleteShowFromSonarr(serie);
+        }
       } else {
-         deleted = await deleteMovieFromRadarr(item);
+        const movie = await searchRadarrMovie(item)
+        if (movie) {
+          const hashes = await getDownloadIdsFromRadarr(movie)
+          hashes.forEach(await deleteFromQBittorrent)
+          await deleteMovieFromRadarr(movie)
+        }
       }
-
 
       if (item.jellyfinId) {
         await deleteJellyfinItem(item.jellyfinId);

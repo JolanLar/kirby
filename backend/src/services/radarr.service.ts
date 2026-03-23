@@ -28,19 +28,21 @@ export async function getMoviesFromRadarr(): Promise<RadarrMovie[]> {
   }
 }
 
-export async function deleteMovieFromRadarr(item: MediaItem): Promise<boolean> {
+export async function searchRadarrMovie(item: MediaItem): Promise<RadarrMovie|undefined> {
   try {
     const movies = await getMoviesFromRadarr();
+    const foundMovie = movies.find((m: RadarrMovie) => m.tmdbId == item.tmdbId)
+    if (!foundMovie)
+      console.error(`[Radarr] Error finding serie (tmdbId: ${item.tmdbId}): missing from radarr instance`);
+    return foundMovie
+  } catch (err: any) {
+    console.error(`[Radarr] Error finding movie (tmdbId: ${item.tmdbId}): ${err.message}`);
+    return undefined
+  }
+}
 
-    // Find by tmdbid
-    let foundMovie = movies.find((m: any) => m.tmdbId === Number(item.tmdbId));
-
-    if (!foundMovie) {
-      console.log(`[Radarr] Movie not found: ${item.title} - ${item.tmdbId}`);
-      return false;
-    }
-
-    console.log(`[Radarr] Found movie ${foundMovie.title} (ID: ${foundMovie.id}). Deleting...`);
+export async function deleteMovieFromRadarr(movie: RadarrMovie): Promise<boolean> {
+  try {
     // Delete movie and its files
     const url = getSetting('radarrUrl');
     const apiKey = getSetting('radarrApiKey');
@@ -48,7 +50,8 @@ export async function deleteMovieFromRadarr(item: MediaItem): Promise<boolean> {
       baseURL: url,
       headers: { 'X-Api-Key': apiKey }
     });
-    await client.delete(`/api/v3/movie/${foundMovie.id}?deleteFiles=true`);
+    await client.delete(`/api/v3/movie/${movie.id}?deleteFiles=true`);
+    console.log(`[Radarr] Movie ${movie.title} (ID: ${movie.id}) deleted.`);
     return true;
   } catch (err: any) {
     console.error(`[Radarr] Error deleting movie: ${err.message}`);
@@ -56,14 +59,7 @@ export async function deleteMovieFromRadarr(item: MediaItem): Promise<boolean> {
   }
 }
 
-export async function getDownloadIdsFromRadarr(item: MediaItem): Promise<string[]> {
-  const movies = await getMoviesFromRadarr();
-  let foundMovie = movies.find((m: any) => m.tmdbId === Number(item.tmdbId));
-  if (!foundMovie) {
-    console.log(`[Radarr] Movie not found: ${item.title} - ${item.tmdbId}`);
-    return [];
-  }
-
+export async function getDownloadIdsFromRadarr(movie: RadarrMovie): Promise<string[]> {
   const url = getSetting('radarrUrl');
   const apiKey = getSetting('radarrApiKey');
 
@@ -77,7 +73,7 @@ export async function getDownloadIdsFromRadarr(item: MediaItem): Promise<string[
       baseURL: url,
       headers: { 'X-Api-Key': apiKey }
     });
-    const res = await client.get(`/api/v3/history/movie?movieId=${foundMovie.id}`);
+    const res = await client.get(`/api/v3/history/movie?movieId=${movie.id}`);
     const history = res.data;
     return [...new Set(history.map((h: any) => h.downloadId).filter((id: string) => id))] as string[];
   } catch (err: any) {

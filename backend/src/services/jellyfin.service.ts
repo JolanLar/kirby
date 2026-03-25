@@ -45,7 +45,7 @@ async function getAllUsersItems(client: any): Promise<MediaItem[]> {
           ? new Date(item.UserData.LastPlayedDate).getTime() 
           : 0;
         const tmdbId = item.Type === 'Episode' ? seriesMap.get(item.SeriesId) : item.ProviderIds?.Tmdb || '';
-        let type = item.Type === 'Series' ? 'show' : 'movie';
+        let type = item.Type === 'Episode' ? 'show' : 'movie';
 
         const existing = itemsMap.get(type + "-" + tmdbId);
         if (existing && lastPlayed > existing.lastSeenAt) {

@@ -161,48 +161,47 @@ export default function Settings() {
   const [plexAuthLoading, setPlexAuthLoading] = useState(false);
   const [usersLoading, setUsersLoading] = useState(false);
 
-  // Sync ignoredUsers/excludedUsers with availableUsers when settings load
-  function syncUserColumns(allUsers: string[], savedExcluded: string[]) {
-    setExcludedUsers(savedExcluded.filter(u => allUsers.includes(u)));
-    setIgnoredUsers(allUsers.filter(u => !savedExcluded.includes(u)));
-  }
-
   useEffect(() => {
+    function syncUserColumns(allUsers: string[], savedExcluded: string[]) {
+      setExcludedUsers(savedExcluded.filter(u => allUsers.includes(u)));
+      setIgnoredUsers(allUsers.filter(u => !savedExcluded.includes(u)));
+    }
+
+    async function fetchData() {
+      try {
+        const dataPromises = [
+          axios.get('/api/settings'),
+          axios.get('/api/paths/plex').catch(() => ({ data: [] })),
+          axios.get('/api/paths/jellyfin').catch(() => ({ data: [] })),
+          axios.get('/api/paths/sonarr').catch(() => ({ data: [] })),
+          axios.get('/api/paths/radarr').catch(() => ({ data: [] })),
+          axios.get('/api/favorites/users').catch(() => ({ data: [] })),
+        ];
+        
+        const [resSettings, resPlex, resJellyfin, resSonarr, resRadarr, resUsers] = await Promise.all(dataPromises);
+
+        const data = resSettings.data;
+        if (data.storages) {
+          try { setStorages(JSON.parse(data.storages)); } catch { /* ignore */ }
+        }
+        setSettings(prev => ({ ...prev, ...data }));
+
+        setPlexPaths(resPlex.data || []);
+        setJellyfinPaths(resJellyfin.data || []);
+        setSonarrPaths(resSonarr.data || []);
+        setRadarrPaths(resRadarr.data || []);
+
+        const users: string[] = resUsers.data || [];
+        let savedExcluded: string[] = [];
+        try { savedExcluded = JSON.parse(data.excludeFavoritesUsers || '[]'); } catch { savedExcluded = []; }
+        syncUserColumns(users, savedExcluded);
+      } catch (err) {
+        console.error(err);
+      }
+    }
+
     fetchData();
   }, []);
-
-  async function fetchData() {
-    try {
-      const dataPromises = [
-        axios.get('/api/settings'),
-        axios.get('/api/paths/plex').catch(() => ({ data: [] })),
-        axios.get('/api/paths/jellyfin').catch(() => ({ data: [] })),
-        axios.get('/api/paths/sonarr').catch(() => ({ data: [] })),
-        axios.get('/api/paths/radarr').catch(() => ({ data: [] })),
-        axios.get('/api/favorites/users').catch(() => ({ data: [] })),
-      ];
-      
-      const [resSettings, resPlex, resJellyfin, resSonarr, resRadarr, resUsers] = await Promise.all(dataPromises);
-
-      const data = resSettings.data;
-      if (data.storages) {
-        try { setStorages(JSON.parse(data.storages)); } catch { /* ignore */ }
-      }
-      setSettings(prev => ({ ...prev, ...data }));
-
-      setPlexPaths(resPlex.data || []);
-      setJellyfinPaths(resJellyfin.data || []);
-      setSonarrPaths(resSonarr.data || []);
-      setRadarrPaths(resRadarr.data || []);
-
-      const users: string[] = resUsers.data || [];
-      let savedExcluded: string[] = [];
-      try { savedExcluded = JSON.parse(data.excludeFavoritesUsers || '[]'); } catch { savedExcluded = []; }
-      syncUserColumns(users, savedExcluded);
-    } catch (err) {
-      console.error(err);
-    }
-  }
 
   // Refresh possible paths for a service
   async function refreshPaths(service: string) {
@@ -431,7 +430,7 @@ export default function Settings() {
                   onChange={e => setSettings(s => ({ ...s, excludeFavorites: e.target.checked ? 'true' : 'false' }))}
                   className="sr-only peer"
                 />
-                <div className="w-11 h-6 bg-slate-700 peer-focus:ring-2 peer-focus:ring-pink-500/50 rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-pink-500"></div>
+                <div className="w-11 h-6 bg-slate-700 peer-focus:ring-2 peer-focus:ring-pink-500/50 rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:inset-s-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-pink-500"></div>
               </label>
             </div>
             <p className="text-xs text-slate-400">Medias favorited by Plex or Jellyfin users will not be deleted. Manage exclusions on the Favorites page.</p>
@@ -448,7 +447,7 @@ export default function Settings() {
                       onChange={e => setSettings(s => ({ ...s, excludeFavoritesAllUsers: e.target.checked ? 'true' : 'false' }))}
                       className="sr-only peer"
                     />
-                    <div className="w-11 h-6 bg-slate-700 peer-focus:ring-2 peer-focus:ring-pink-500/50 rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-pink-500"></div>
+                    <div className="w-11 h-6 bg-slate-700 peer-focus:ring-2 peer-focus:ring-pink-500/50 rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:inset-s-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-pink-500"></div>
                   </label>
                 </div>
 

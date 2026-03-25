@@ -12,6 +12,7 @@ Kirby is a powerful, centralized deletion and exclusion manager designed for sop
 
 - **Automated Deletion Queue:** Keeps track of your unwatched or older media and intelligently purges it once designated storage thresholds are met.
 - **Smart Shield (Auto-Exclusions):** Tracks the deletion history of your library natively. If a movie or series hits your custom threshold of deletions over time, Kirby safely locks it away into the **Exclusions** list to prevent future re-deletions automatically!
+- **Favorite Detection:** Automatically detects media favorited by Plex and Jellyfin users and excludes it from deletion. Supports per-user targeting, cross-server aggregation, and an "Ignore" override for individual items.
 - **Multi-Server Ready:** Easily toggle paths and storage mapping across Plex and Jellyfin arrays.
 - **Dynamic Frontend:** Built with React & Vite + Tailwind, giving you native searching, filtering, and rapid-pagination.
 
@@ -58,12 +59,23 @@ Visualize and manage your shielded media gracefully. Filter directly by items ca
   <img src="docs/assets/exclusions.png" alt="Exclusions Setup" width="800"/>
 </p>
 
+### ❤️ Favorites
+
+Browse all media favorited across your Plex and Jellyfin servers. Source badges (P/J) identify where each favorite originates. Hover any item to toggle its protection — "Ignore" re-enters it in the deletion queue, "Restore" re-enables the shield.
+
+<p align="center">
+  <img src="docs/assets/favorites.png" alt="Favorites Page" width="800"/>
+</p>
+
 ### ⚙️ Deep Configuration Setup
 
-Connect everything seamlessly using the global settings. Set your free-space targets, custom endpoints, and automation rules in seconds.
+Connect everything seamlessly using the global settings. Set your free-space targets, custom endpoints, and automation rules in seconds. Enable **Exclude Favorite Medias** to protect favorited content, with optional per-user targeting.
 
 <p align="center">
   <img src="docs/assets/settings.png" alt="Settings Configuration" width="800"/>
+</p>
+<p align="center">
+  <img src="docs/assets/settings2.png" alt="Settings Configuration" width="800"/>
 </p>
 
 ---

@@ -1,18 +1,60 @@
 import { getDiskStatus } from '../services/disk.service';
-import { getPlexItems, deletePlexItem } from '../services/plex.service';
-import { getJellyfinItems, deleteJellyfinItem } from '../services/jellyfin.service';
+import { getPlexItems, deletePlexItem, getPlexFavorites, getPlexMachineId } from '../services/plex.service';
+import { getJellyfinItems, deleteJellyfinItem, getJellyfinFavorites } from '../services/jellyfin.service';
 import { deleteMovieFromRadarr, getMoviesFromRadarr, searchRadarrMovie, getDownloadIdsFromRadarr } from '../services/radarr.service';
 import { deleteShowFromSonarr, getShowsFromSonarr, searchSonarrSerie, getDownloadIdsFromSonarr } from '../services/sonarr.service';
 import { deleteFromQBittorrent } from '../services/qbittorrent.service';
-import { isExcluded, getStorages, recordDeletion, getDeleteHistoryCounts, getSetting, addExclusion } from '../db';
+import { isExcluded, getStorages, recordDeletion, getDeleteHistoryCounts, getSetting, addExclusion, isFavoritedAndNotIgnored, upsertFavorite, removeStaleFavorites } from '../db';
 import { MediaItem } from '../models';
 
 export let deletionQueue: Record<string, MediaItem[]> = {};
 
-export function removeFromQueue(tmdbId: string) {
+export function removeFromQueue(tmdbId: string, type: string) {
   for (const key of Object.keys(deletionQueue)) {
-    deletionQueue[key] = deletionQueue[key].filter(i => i.tmdbId !== tmdbId);
+    deletionQueue[key] = deletionQueue[key].filter(i => !(i.tmdbId === tmdbId && i.type === type));
   }
+}
+
+async function syncFavorites(): Promise<void> {
+  const excludeFavorites = getSetting('excludeFavorites', 'false') === 'true';
+  if (!excludeFavorites) return;
+
+  const allUsersMode = getSetting('excludeFavoritesAllUsers', 'true') === 'true';
+  let includeUsers: string[] | undefined;
+  if (!allUsersMode) {
+    const raw = getSetting('excludeFavoritesUsers', '[]');
+    try { includeUsers = JSON.parse(raw); } catch { includeUsers = []; }
+  }
+
+  const [plexFavs, jellyfinFavs] = await Promise.all([
+    getPlexFavorites(includeUsers),
+    getJellyfinFavorites(includeUsers),
+  ]);
+
+  // Merge by composite key (type + tmdbId) — a movie and show can share the same tmdbId
+  const merged = new Map<string, { tmdbId: string; title: string; type: string; posterUrl: string; favoritedBy: string[]; lastSeenAt: number; sources: string[] }>();
+  for (const [source, favs] of [['plex', plexFavs], ['jellyfin', jellyfinFavs]] as const) {
+    for (const f of favs) {
+      const key = f.type + '-' + f.tmdbId;
+      const existing = merged.get(key);
+      if (existing) {
+        for (const u of f.favoritedBy) {
+          if (!existing.favoritedBy.includes(u)) existing.favoritedBy.push(u);
+        }
+        if (!existing.sources.includes(source)) existing.sources.push(source);
+      } else {
+        merged.set(key, { ...f, lastSeenAt: 0, sources: [source] });
+      }
+    }
+  }
+
+  // Persist to DB — we'll get lastSeenAt from the queue items lookup
+  const currentKeys: string[] = [];
+  for (const fav of merged.values()) {
+    upsertFavorite(fav.tmdbId, fav.title, fav.type, fav.posterUrl, fav.favoritedBy, fav.lastSeenAt, fav.sources);
+    currentKeys.push(fav.type + '-' + fav.tmdbId);
+  }
+  removeStaleFavorites(currentKeys);
 }
 
 async function fetchAndRankItems(): Promise<MediaItem[]> {
@@ -31,21 +73,11 @@ async function fetchAndRankItems(): Promise<MediaItem[]> {
       if (item.lastSeenAt > uniqueItems[key].lastSeenAt) {
         uniqueItems[key].lastSeenAt = item.lastSeenAt;
       }
-      if (item.posterUrl) {
-        uniqueItems[key].posterUrl = item.posterUrl;
-      }
-      if (item.plexId) {
-        uniqueItems[key].plexId = item.plexId;
-      }
-      if (item.jellyfinId) {
-        uniqueItems[key].jellyfinId = item.jellyfinId;
-      }
-      if (item.plexPath) {
-        uniqueItems[key].plexPath = item.plexPath;
-      }
-      if (item.jellyfinPath) {
-        uniqueItems[key].jellyfinPath = item.jellyfinPath;
-      }
+      if (item.posterUrl) uniqueItems[key].posterUrl = item.posterUrl;
+      if (item.plexId) uniqueItems[key].plexId = item.plexId;
+      if (item.jellyfinId) uniqueItems[key].jellyfinId = item.jellyfinId;
+      if (item.plexPath) uniqueItems[key].plexPath = item.plexPath;
+      if (item.jellyfinPath) uniqueItems[key].jellyfinPath = item.jellyfinPath;
     }
   }
 
@@ -53,44 +85,58 @@ async function fetchAndRankItems(): Promise<MediaItem[]> {
   const sonarrSeries = await getShowsFromSonarr();
   const radarrMovies = await getMoviesFromRadarr();
 
-  // Merge sizes into uniqueItems
   for (const serie of sonarrSeries) {
-    const type = "show";
-    const key = serie.tmdbId;
-    if (uniqueItems[type + "-" + key]) {
-      uniqueItems[type + "-" + key].sizeOnDisk = serie.statistics.sizeOnDisk;
+    const key = "show-" + serie.tmdbId;
+    if (uniqueItems[key]) {
+      uniqueItems[key].sizeOnDisk = serie.statistics.sizeOnDisk;
+      uniqueItems[key].sonarrId = serie.titleSlug;
     }
   }
   for (const movie of radarrMovies) {
-    const type = "movie";
-    const key = movie.tmdbId;
-    if (uniqueItems[type + "-" + key]) {
-      uniqueItems[type + "-" + key].sizeOnDisk = movie.statistics.sizeOnDisk;
+    const key = "movie-" + movie.tmdbId;
+    if (uniqueItems[key]) {
+      uniqueItems[key].sizeOnDisk = movie.statistics.sizeOnDisk;
+      uniqueItems[key].radarrId = movie.tmdbId;
     }
   }
 
   const threshold = parseInt(getSetting('autoExcludeThreshold', '0'), 10);
-  const deleteCounts = threshold > 0 ? getDeleteHistoryCounts() : {};
+  const deleteDeltaDays = parseInt(getSetting('deletionDeltaDays', '0'), 10);
+  const excludeFavorites = getSetting('excludeFavorites', 'false') === 'true';
+  const deleteCounts = (threshold > 0 || deleteDeltaDays > 0) ? getDeleteHistoryCounts() : {};
 
-  const sorted = Object.values(uniqueItems)
-    .filter(item => {
-      if (isExcluded(item.type, item.tmdbId)) return false;
-      
-      if (threshold > 0) {
-        const count = deleteCounts[item.tmdbId] || 0;
-        if (count >= threshold) {
-          addExclusion(item.tmdbId, item.title, item.type, item.posterUrl, item.lastSeenAt, 1);
-          return false;
-        }
+  const filtered = Object.values(uniqueItems).filter(item => {
+    if (isExcluded(item.type, item.tmdbId)) return false;
+
+    if (threshold > 0) {
+      const count = deleteCounts[item.type + '-' + item.tmdbId] || 0;
+      if (count >= threshold) {
+        addExclusion(item.tmdbId, item.title, item.type, item.posterUrl, item.lastSeenAt, 1);
+        return false;
       }
-      return true;
+    }
+
+    if (excludeFavorites && isFavoritedAndNotIgnored(item.tmdbId, item.type)) return false;
+
+    return true;
+  });
+
+  // Apply deletion delta to sort: effectiveDate = lastSeenAt + count * deltaDays * ms_per_day
+  const MS_PER_DAY = 86_400_000;
+  const sorted = filtered
+    .map(item => {
+      const count = deleteCounts[item.type + '-' + item.tmdbId] || 0;
+      const deltaMs = count * deleteDeltaDays * MS_PER_DAY;
+      return { ...item, deletionCount: count, deltaDays: deleteDeltaDays, _effectiveDate: item.lastSeenAt + deltaMs };
     })
-    .sort((a, b) => a.lastSeenAt - b.lastSeenAt);
+    .sort((a, b) => a._effectiveDate - b._effectiveDate);
 
   return sorted;
 }
 
 export async function refreshQueue(): Promise<Record<string, MediaItem[]>> {
+  await syncFavorites();
+  getPlexMachineId().catch(() => {}); // Keep plexMachineId setting current for frontend links
   const sortedItems = await fetchAndRankItems();
   const storages = getStorages();
   
@@ -153,7 +199,7 @@ export async function processDeletion() {
           const deleted = await deleteItem(oldestItem);
 
           if (deleted) {
-            deletionQueue[storage.id] = deletionQueue[storage.id].filter(i => i.tmdbId !== oldestItem.tmdbId);
+            deletionQueue[storage.id] = deletionQueue[storage.id].filter(i => !(i.tmdbId === oldestItem.tmdbId && i.type === oldestItem.type));
           } else {
             console.log(`[Job] [${storage.name}] Could not delete item: ${oldestItem.title}. Skipping until next run or exclusion...`);
           }

@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef } from 'react';
 import axios from 'axios';
-import { Settings as SettingsIcon, Save, Server, Shield, HardDrive, CheckCircle2, XCircle, Loader2, Trash, HelpCircle, ExternalLink } from 'lucide-react';
+import { Settings as SettingsIcon, Save, Server, Shield, HardDrive, CheckCircle2, XCircle, Loader2, Trash, HelpCircle, ExternalLink, Heart, ChevronRight, ChevronLeft, ChevronsRight, ChevronsLeft } from 'lucide-react';
 
 const InputGroup = ({ 
   label, 
@@ -136,8 +136,18 @@ export default function Settings() {
     sonarrUrl: '', sonarrApiKey: '',
     radarrUrl: '', radarrApiKey: '',
     qbUrl: '', qbUser: '', qbPass: '',
-    autoExcludeThreshold: '0'
+    autoExcludeThreshold: '0',
+    deletionDeltaDays: '0',
+    excludeFavorites: 'false',
+    excludeFavoritesAllUsers: 'true',
+    excludeFavoritesUsers: '[]',
   });
+
+  // Dual-column user picker state
+  const [ignoredUsers, setIgnoredUsers] = useState<string[]>([]); // left column
+  const [excludedUsers, setExcludedUsers] = useState<string[]>([]); // right column
+  const [selectedLeft, setSelectedLeft] = useState<string[]>([]);
+  const [selectedRight, setSelectedRight] = useState<string[]>([]);
 
   const [storages, setStorages] = useState<StorageConfig[]>([]);
   const [plexPaths, setPlexPaths] = useState<string[]>([]);
@@ -149,6 +159,13 @@ export default function Settings() {
   const [msg, setMsg] = useState('');
   const [testStatus, setTestStatus] = useState<Record<string, 'idle' | 'testing' | 'success' | 'failed'>>({});
   const [plexAuthLoading, setPlexAuthLoading] = useState(false);
+  const [usersLoading, setUsersLoading] = useState(false);
+
+  // Sync ignoredUsers/excludedUsers with availableUsers when settings load
+  function syncUserColumns(allUsers: string[], savedExcluded: string[]) {
+    setExcludedUsers(savedExcluded.filter(u => allUsers.includes(u)));
+    setIgnoredUsers(allUsers.filter(u => !savedExcluded.includes(u)));
+  }
 
   useEffect(() => {
     fetchData();
@@ -161,16 +178,15 @@ export default function Settings() {
         axios.get('/api/paths/plex').catch(() => ({ data: [] })),
         axios.get('/api/paths/jellyfin').catch(() => ({ data: [] })),
         axios.get('/api/paths/sonarr').catch(() => ({ data: [] })),
-        axios.get('/api/paths/radarr').catch(() => ({ data: [] }))
+        axios.get('/api/paths/radarr').catch(() => ({ data: [] })),
+        axios.get('/api/favorites/users').catch(() => ({ data: [] })),
       ];
       
-      const [resSettings, resPlex, resJellyfin, resSonarr, resRadarr] = await Promise.all(dataPromises);
+      const [resSettings, resPlex, resJellyfin, resSonarr, resRadarr, resUsers] = await Promise.all(dataPromises);
 
       const data = resSettings.data;
       if (data.storages) {
-        try {
-          setStorages(JSON.parse(data.storages));
-        } catch { /* ignore */ }
+        try { setStorages(JSON.parse(data.storages)); } catch { /* ignore */ }
       }
       setSettings(prev => ({ ...prev, ...data }));
 
@@ -178,6 +194,11 @@ export default function Settings() {
       setJellyfinPaths(resJellyfin.data || []);
       setSonarrPaths(resSonarr.data || []);
       setRadarrPaths(resRadarr.data || []);
+
+      const users: string[] = resUsers.data || [];
+      let savedExcluded: string[] = [];
+      try { savedExcluded = JSON.parse(data.excludeFavoritesUsers || '[]'); } catch { savedExcluded = []; }
+      syncUserColumns(users, savedExcluded);
     } catch (err) {
       console.error(err);
     }
@@ -212,7 +233,8 @@ export default function Settings() {
     try {
       await axios.post('/api/settings', {
         ...settings,
-        storages: JSON.stringify(storages)
+        storages: JSON.stringify(storages),
+        excludeFavoritesUsers: JSON.stringify(excludedUsers),
       });
       setMsg('Settings saved successfully!');
       setTimeout(() => setMsg(''), 3000);
@@ -221,6 +243,47 @@ export default function Settings() {
       setMsg('Error saving settings.');
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function refreshFavoriteUsers() {
+    setUsersLoading(true);
+    try {
+      const res = await axios.get('/api/favorites/users');
+      const users: string[] = res.data || [];
+      // New users always go to left (ignored) column
+      setIgnoredUsers(prev => {
+        const newUsers = users.filter(u => !excludedUsers.includes(u) && !prev.includes(u));
+        return [...prev.filter(u => users.includes(u)), ...newUsers];
+      });
+      setExcludedUsers(prev => prev.filter(u => users.includes(u)));
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setUsersLoading(false);
+    }
+  }
+
+  // Dual-column transfers
+  function moveToRight(all = false) {
+    const toMove = all ? ignoredUsers : selectedLeft;
+    setExcludedUsers(prev => [...prev, ...toMove.filter(u => !prev.includes(u))]);
+    setIgnoredUsers(prev => prev.filter(u => !toMove.includes(u)));
+    setSelectedLeft([]);
+  }
+  function moveToLeft(all = false) {
+    const toMove = all ? excludedUsers : selectedRight;
+    setIgnoredUsers(prev => [...prev, ...toMove.filter(u => !prev.includes(u))]);
+    setExcludedUsers(prev => prev.filter(u => !toMove.includes(u)));
+    setSelectedRight([]);
+  }
+  function toggleColSelection(col: 'left' | 'right', user: string, e: React.MouseEvent) {
+    const setter = col === 'left' ? setSelectedLeft : setSelectedRight;
+    const list = col === 'left' ? selectedLeft : selectedRight;
+    if (e.ctrlKey || e.metaKey) {
+      setter(list.includes(user) ? list.filter(u => u !== user) : [...list, user]);
+    } else {
+      setter(list.includes(user) && list.length === 1 ? [] : [user]);
     }
   }
 
@@ -343,10 +406,150 @@ export default function Settings() {
               onChange={handleChange} 
               placeholder="e.g. 3 (0 to disable)" 
             />
+            <InputGroup 
+              label="Deletion Delta Days" 
+              name="deletionDeltaDays" 
+              type="number"
+              value={settings.deletionDeltaDays || '0'} 
+              onChange={handleChange} 
+              placeholder="e.g. 7 (0 to disable)" 
+            />
           </div>
-          <p className="text-xs text-slate-400 mt-3 hover:text-slate-300">
-            Automatically exclude media items that have been deleted across time by this amount. Enter 0 to disable.
-          </p>
+          <p className="text-xs text-slate-400 mt-3">Auto-Exclude: automatically exclude media deleted this many times. Deletion Delta: days added per deletion event to postpone re-deletion. Set to 0 to disable each.</p>
+
+          {/* Favorite Exclusion */}
+          <div className="mt-6 pt-6 border-t border-slate-700/50 space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <Heart className="w-5 h-5 text-pink-400" />
+                <span className="font-semibold text-slate-200">Exclude Favorite Medias</span>
+              </div>
+              <label className="relative inline-flex items-center cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={settings.excludeFavorites === 'true'}
+                  onChange={e => setSettings(s => ({ ...s, excludeFavorites: e.target.checked ? 'true' : 'false' }))}
+                  className="sr-only peer"
+                />
+                <div className="w-11 h-6 bg-slate-700 peer-focus:ring-2 peer-focus:ring-pink-500/50 rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-pink-500"></div>
+              </label>
+            </div>
+            <p className="text-xs text-slate-400">Medias favorited by Plex or Jellyfin users will not be deleted. Manage exclusions on the Favorites page.</p>
+
+            {settings.excludeFavorites === 'true' && (
+              <div className="space-y-4 pl-2 border-l-2 border-pink-500/30">
+                {/* All users toggle */}
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-slate-300 font-medium">Apply to all users</span>
+                  <label className="relative inline-flex items-center cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={settings.excludeFavoritesAllUsers !== 'false'}
+                      onChange={e => setSettings(s => ({ ...s, excludeFavoritesAllUsers: e.target.checked ? 'true' : 'false' }))}
+                      className="sr-only peer"
+                    />
+                    <div className="w-11 h-6 bg-slate-700 peer-focus:ring-2 peer-focus:ring-pink-500/50 rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-pink-500"></div>
+                  </label>
+                </div>
+
+                {/* Per-user dual column picker */}
+                {settings.excludeFavoritesAllUsers === 'false' && (
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs text-slate-400">Select which users' favorites exclude medias from deletion</span>
+                      <button
+                        type="button"
+                        onClick={refreshFavoriteUsers}
+                        disabled={usersLoading}
+                        className="text-xs text-pink-400 hover:text-pink-300 flex items-center gap-1 disabled:opacity-50"
+                      >
+                        {usersLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : null}
+                        Refresh Users
+                      </button>
+                    </div>
+
+                    <div className="flex gap-3 items-stretch">
+                      {/* Left column — Ignored */}
+                      <div className="flex-1 flex flex-col">
+                        <div className="text-xs font-semibold text-slate-400 mb-1.5 px-1">Ignored Users</div>
+                        <div className="flex-1 min-h-[120px] bg-slate-900 border border-slate-700 rounded-lg overflow-y-auto">
+                          {ignoredUsers.length === 0 ? (
+                            <p className="text-xs text-slate-600 text-center p-4">No ignored users</p>
+                          ) : (
+                            ignoredUsers.map(u => (
+                              <button
+                                key={u}
+                                type="button"
+                                onClick={(e) => toggleColSelection('left', u, e)}
+                                className={`w-full text-left px-3 py-2 text-sm transition-colors border-b border-slate-800 last:border-0 ${
+                                  selectedLeft.includes(u)
+                                    ? 'bg-pink-500/20 text-pink-300'
+                                    : 'text-slate-300 hover:bg-slate-800'
+                                }`}
+                              >
+                                {u}
+                              </button>
+                            ))
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Transfer buttons */}
+                      <div className="flex flex-col justify-center gap-1">
+                        <button type="button" onClick={() => moveToRight(false)} disabled={selectedLeft.length === 0}
+                          title="Move selected →"
+                          className="p-1.5 rounded bg-slate-700 hover:bg-pink-500/30 text-slate-300 hover:text-pink-300 disabled:opacity-30 transition-colors">
+                          <ChevronRight className="w-4 h-4" />
+                        </button>
+                        <button type="button" onClick={() => moveToRight(true)} disabled={ignoredUsers.length === 0}
+                          title="Move all →"
+                          className="p-1.5 rounded bg-slate-700 hover:bg-pink-500/30 text-slate-300 hover:text-pink-300 disabled:opacity-30 transition-colors">
+                          <ChevronsRight className="w-4 h-4" />
+                        </button>
+                        <div className="h-2" />
+                        <button type="button" onClick={() => moveToLeft(false)} disabled={selectedRight.length === 0}
+                          title="← Move selected"
+                          className="p-1.5 rounded bg-slate-700 hover:bg-slate-500/30 text-slate-300 hover:text-slate-200 disabled:opacity-30 transition-colors">
+                          <ChevronLeft className="w-4 h-4" />
+                        </button>
+                        <button type="button" onClick={() => moveToLeft(true)} disabled={excludedUsers.length === 0}
+                          title="← Move all"
+                          className="p-1.5 rounded bg-slate-700 hover:bg-slate-500/30 text-slate-300 hover:text-slate-200 disabled:opacity-30 transition-colors">
+                          <ChevronsLeft className="w-4 h-4" />
+                        </button>
+                      </div>
+
+                      {/* Right column — Excluded */}
+                      <div className="flex-1 flex flex-col">
+                        <div className="text-xs font-semibold text-pink-400 mb-1.5 px-1">Excluded Users</div>
+                        <div className="flex-1 min-h-[120px] bg-slate-900 border border-pink-500/30 rounded-lg overflow-y-auto">
+                          {excludedUsers.length === 0 ? (
+                            <p className="text-xs text-slate-600 text-center p-4">No excluded users</p>
+                          ) : (
+                            excludedUsers.map(u => (
+                              <button
+                                key={u}
+                                type="button"
+                                onClick={(e) => toggleColSelection('right', u, e)}
+                                className={`w-full text-left px-3 py-2 text-sm transition-colors border-b border-slate-800 last:border-0 ${
+                                  selectedRight.includes(u)
+                                    ? 'bg-pink-500/20 text-pink-300'
+                                    : 'text-slate-300 hover:bg-slate-800'
+                                }`}
+                              >
+                                {u}
+                              </button>
+                            ))
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                    <p className="text-xs text-slate-500">New users default to the left (ignored) column. Ctrl+click for multi-select.</p>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
         </section>
         
         {/* Core Settings */}

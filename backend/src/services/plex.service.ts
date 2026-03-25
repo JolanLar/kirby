@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { getSetting } from '../db';
+import { getSetting, setSetting } from '../db';
 import { MediaItem } from '../models';
 
 const PLEX_HEADERS = {
@@ -7,6 +7,22 @@ const PLEX_HEADERS = {
   'X-Plex-Client-Identifier': 'Kirby-Media-Manager-Auth',
   'Accept': 'application/json'
 };
+
+export async function getPlexMachineId(): Promise<string | null> {
+  const url = getSetting('plexUrl');
+  const token = getSetting('plexToken');
+  if (!url || !token) return null;
+  try {
+    const res = await axios.get(`${url}/identity`, {
+      headers: { ...PLEX_HEADERS, 'X-Plex-Token': token }
+    });
+    const id = res.data?.MediaContainer?.machineIdentifier || null;
+    if (id) setSetting('plexMachineId', id);
+    return id;
+  } catch {
+    return getSetting('plexMachineId') || null;
+  }
+}
 
 export async function getPlexItems(): Promise<MediaItem[]> {
   const url = getSetting('plexUrl');
@@ -158,6 +174,116 @@ export async function getPlexResources(token: string): Promise<any[]> {
     return (res.data || []).filter((r: any) => r.provides?.includes('server'));
   } catch (err: any) {
     console.error(`[Plex] Failed to get resources: ${err.message}`);
+    return [];
+  }
+}
+
+export async function getPlexUsers(): Promise<string[]> {
+  const url = getSetting('plexUrl');
+  const token = getSetting('plexToken');
+  if (!url || !token) return [];
+  try {
+    const res = await axios.get('https://plex.tv/api/v2/home/users', {
+      headers: { ...PLEX_HEADERS, 'X-Plex-Token': token }
+    });
+    const users = res.data.users || [];
+    return users.map((u: any) => u.username || u.title || u.friendlyName);
+  } catch (err: any) {
+    console.error(`[Plex] Failed to fetch users: ${err.message}`);
+    return [];
+  }
+}
+
+export interface FavoritedMedia {
+  tmdbId: string;
+  title: string;
+  type: 'movie' | 'show';
+  posterUrl: string;
+  favoritedBy: string[];
+}
+
+export async function getPlexFavorites(includeUsers?: string[]): Promise<FavoritedMedia[]> {
+  const url = getSetting('plexUrl');
+  const token = getSetting('plexToken');
+  const publicUrl = getSetting('plexPublicUrl');
+  if (!url || !token) return [];
+
+  try {
+    const client = axios.create({
+      baseURL: url,
+      headers: { ...PLEX_HEADERS, 'X-Plex-Token': token }
+    });
+
+    // Get all users with access tokens
+    let usersWithTokens: { username: string; token: string }[] = [];
+    try {
+      const homeRes = await axios.get('https://plex.tv/api/v2/home/users', {
+        headers: { ...PLEX_HEADERS, 'X-Plex-Token': token }
+      });
+      const homeUsers = homeRes.data || [];
+      usersWithTokens = [{ username: 'admin', token }];
+      // Additional managed users would need switching — use admin token for all sections
+      for (const u of homeUsers) {
+        const name = u.username || u.title || u.friendlyName;
+        if (name && name !== 'admin') {
+          usersWithTokens.push({ username: name, token }); // use admin token, ratings are per-server
+        }
+      }
+    } catch {
+      usersWithTokens = [{ username: 'admin', token }];
+    }
+
+    const filtered = includeUsers && includeUsers.length > 0
+      ? usersWithTokens.filter(u => includeUsers.includes(u.username))
+      : usersWithTokens;
+
+    const libsRes = await client.get('/library/sections');
+    const sections = libsRes.data?.MediaContainer?.Directory || [];
+
+    // Map tmdbId -> FavoritedMedia
+    const favMap = new Map<string, FavoritedMedia>();
+
+    for (const userEntry of filtered) {
+      const userClient = axios.create({
+        baseURL: url,
+        headers: { ...PLEX_HEADERS, 'X-Plex-Token': userEntry.token }
+      });
+
+      for (const section of sections) {
+        try {
+          // userRating=10 (loved/thumbs-up)
+          const res = await userClient.get(
+            `/library/sections/${section.key}/all?userRating=10&includeGuids=1`
+          );
+          const metadata = res.data?.MediaContainer?.Metadata || [];
+          for (const meta of metadata) {
+            let tmdbId = meta.ratingKey;
+            if (meta.Guid && Array.isArray(meta.Guid)) {
+              const tmdbGuid = meta.Guid.find((g: any) => g?.id?.startsWith('tmdb://'));
+              if (tmdbGuid) tmdbId = tmdbGuid.id.replace('tmdb://', '');
+            }
+            const existing = favMap.get(tmdbId);
+            if (existing) {
+              if (!existing.favoritedBy.includes(userEntry.username)) {
+                existing.favoritedBy.push(userEntry.username);
+              }
+            } else {
+              favMap.set(tmdbId, {
+                tmdbId,
+                title: meta.title,
+                type: section.type === 'show' ? 'show' : 'movie',
+                posterUrl: `${publicUrl || url}${meta.thumb}?X-Plex-Token=${token}`,
+                favoritedBy: [userEntry.username],
+              });
+            }
+          }
+        } catch { /* section may not support rating filter */ }
+      }
+    }
+
+    return Array.from(favMap.values());
+  } catch (err: any) {
+    console.error(`[Plex] Failed to fetch favorites: ${err.message}`);
     return [];
   }
 }

@@ -1,4 +1,4 @@
-# 🌟 Kirby: Automated Media Purger & Shield
+# 🌟 Kirby: Automated Media Purger
 
 <p align="center">
   <img src="docs/assets/dashboard.png" alt="Kirby Dashboard" width="800"/>

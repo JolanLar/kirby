@@ -21,11 +21,12 @@ async function getAllUsersItems(client: any): Promise<MediaItem[]> {
     if (item.Type === 'Series') {
       seriesMap.set(item.Id, item.ProviderIds.Tmdb);
     }
-    itemsMap.set(item.ProviderIds.Tmdb, {
+    let type = item.Type === 'Series' ? 'show' : 'movie';
+    itemsMap.set(type + "-" + item.ProviderIds.Tmdb, {
       jellyfinId: item.Id,
       tmdbId: item.ProviderIds.Tmdb,
       title: item.Name,
-      type: item.Type === 'Series' ? 'show' : 'movie',
+      type: type as 'movie' | 'show',
       lastSeenAt: new Date(item.DateCreated).getTime(),
       posterUrl: `${publicUrl || url}/Items/${item.Id}/Images/Primary`,
       sizeOnDisk: 0,
@@ -44,8 +45,9 @@ async function getAllUsersItems(client: any): Promise<MediaItem[]> {
           ? new Date(item.UserData.LastPlayedDate).getTime() 
           : 0;
         const tmdbId = item.Type === 'Episode' ? seriesMap.get(item.SeriesId) : item.ProviderIds?.Tmdb || '';
+        let type = item.Type === 'Series' ? 'show' : 'movie';
 
-        const existing = itemsMap.get(tmdbId);
+        const existing = itemsMap.get(type + "-" + tmdbId);
         if (existing && lastPlayed > existing.lastSeenAt) {
           existing.lastSeenAt = lastPlayed;
         }
@@ -145,3 +147,82 @@ export async function getMappingPaths(url: string = getSetting('jellyfinUrl'), a
     return mappingPaths;
   }))];
 }
+
+export async function getJellyfinUsers(): Promise<string[]> {
+  const url = getSetting('jellyfinUrl');
+  const apiKey = getSetting('jellyfinApiKey');
+  if (!url || !apiKey) return [];
+  try {
+    const client = axios.create({
+      baseURL: url,
+      headers: { 'Authorization': `MediaBrowser Token="${apiKey}"`, 'Accept': 'application/json' }
+    });
+    const res = await client.get('/Users');
+    return (res.data || []).map((u: any) => u.Name);
+  } catch (err: any) {
+    console.error(`[Jellyfin] Failed to fetch users: ${err.message}`);
+    return [];
+  }
+}
+
+export interface JellyfinFavoritedMedia {
+  tmdbId: string;
+  title: string;
+  type: 'movie' | 'show';
+  posterUrl: string;
+  favoritedBy: string[];
+}
+
+export async function getJellyfinFavorites(includeUsers?: string[]): Promise<JellyfinFavoritedMedia[]> {
+  const url = getSetting('jellyfinUrl');
+  const apiKey = getSetting('jellyfinApiKey');
+  const publicUrl = getSetting('jellyfinPublicUrl');
+  if (!url || !apiKey) return [];
+
+  try {
+    const client = axios.create({
+      baseURL: url,
+      headers: { 'Authorization': `MediaBrowser Token="${apiKey}"`, 'Accept': 'application/json' }
+    });
+
+    const usersRes = await client.get('/Users');
+    let users: any[] = usersRes.data || [];
+    if (includeUsers && includeUsers.length > 0) {
+      users = users.filter((u: any) => includeUsers.includes(u.Name));
+    }
+
+    const favMap = new Map<string, JellyfinFavoritedMedia>();
+
+    await Promise.all(users.map(async (user: any) => {
+      try {
+        const res = await client.get(
+          `/Items?IncludeItemTypes=Movie,Series&Filters=IsFavorite&Fields=ProviderIds,Path&Recursive=true&UserId=${user.Id}`
+        );
+        for (const item of res.data.Items || []) {
+          const tmdbId = item.ProviderIds?.Tmdb;
+          if (!tmdbId) continue;
+          const existing = favMap.get(tmdbId);
+          if (existing) {
+            if (!existing.favoritedBy.includes(user.Name)) existing.favoritedBy.push(user.Name);
+          } else {
+            favMap.set(tmdbId, {
+              tmdbId,
+              title: item.Name,
+              type: item.Type === 'Series' ? 'show' : 'movie',
+              posterUrl: `${publicUrl || url}/Items/${item.Id}/Images/Primary`,
+              favoritedBy: [user.Name],
+            });
+          }
+        }
+      } catch (e: any) {
+        console.error(`[Jellyfin] Failed to fetch favorites for user ${user.Name}: ${e.message}`);
+      }
+    }));
+
+    return Array.from(favMap.values());
+  } catch (err: any) {
+    console.error(`[Jellyfin] Failed to fetch favorites: ${err.message}`);
+    return [];
+  }
+}
+

@@ -19,6 +19,10 @@ interface MediaItem {
   posterUrl: string;
   sizeOnDisk: number;
   deleting?: boolean;
+  deletionCount?: number;
+  deltaDays?: number;
+  radarrId?: number;
+  sonarrId?: number;
 }
 
 interface StorageConfig {
@@ -35,6 +39,7 @@ export default function Dashboard() {
   const [searchQuery, setSearchQuery] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(48);
+  const [serviceUrls, setServiceUrls] = useState({ plexPublicUrl: '', plexMachineId: '', jellyfinPublicUrl: '', radarrUrl: '', sonarrUrl: '' });
 
   const disableAutoRefresh = useRef(false);
   const pendingOperations = useRef(0);
@@ -55,9 +60,9 @@ export default function Dashboard() {
         const newQueues: Record<string, MediaItem[]> = {};
         for (const storageId in qRes.data) {
           newQueues[storageId] = qRes.data[storageId]
-            .filter((item: MediaItem) => !deletedRef.current.has(item.tmdbId))
+            .filter((item: MediaItem) => !deletedRef.current.has(item.type + '-' + item.tmdbId))
             .map((newItem: MediaItem) => {
-              const oldItem = prev[storageId]?.find(i => i.tmdbId === newItem.tmdbId);
+              const oldItem = prev[storageId]?.find(i => i.tmdbId === newItem.tmdbId && i.type === newItem.type);
               if (oldItem?.deleting) {
                 return { ...newItem, deleting: true };
               }
@@ -82,6 +87,13 @@ export default function Dashboard() {
         setStorageConfigs([]);
         setActiveTab('');
       }
+      setServiceUrls({
+        plexPublicUrl: sRes.data.plexPublicUrl || sRes.data.plexUrl || '',
+        plexMachineId: sRes.data.plexMachineId || '',
+        jellyfinPublicUrl: sRes.data.jellyfinPublicUrl || sRes.data.jellyfinUrl || '',
+        radarrUrl: sRes.data.radarrUrl || '',
+        sonarrUrl: sRes.data.sonarrUrl || '',
+      });
       setLoading(false);
     } catch (err) {
       console.error(err);
@@ -103,7 +115,7 @@ export default function Dashboard() {
   function removeItemFromQueues(item: MediaItem) {
     setQueues(prev => {
       const newQueues = { ...prev };
-      newQueues[activeTab] = newQueues[activeTab].filter(i => i.tmdbId !== item.tmdbId);
+      newQueues[activeTab] = newQueues[activeTab].filter(i => !(i.tmdbId === item.tmdbId && i.type === item.type));
       return newQueues;
     });
   }
@@ -120,7 +132,7 @@ export default function Dashboard() {
         posterUrl: item.posterUrl,
         lastSeenAt: item.lastSeenAt
       });
-      deletedRef.current.add(item.tmdbId);
+      deletedRef.current.add(item.type + '-' + item.tmdbId);
     } catch (err) {
       console.error(err);
     } finally {
@@ -135,7 +147,7 @@ export default function Dashboard() {
   async function deleteItem(item: MediaItem) {
     setQueues(prev => {
       const newQueues = { ...prev };
-      newQueues[activeTab] = newQueues[activeTab].map(i => i.tmdbId === item.tmdbId ? { ...i, deleting: true } : i);
+      newQueues[activeTab] = newQueues[activeTab].map(i => (i.tmdbId === item.tmdbId && i.type === item.type) ? { ...i, deleting: true } : i);
       return newQueues;
     });
     pendingOperations.current += 1;
@@ -151,7 +163,7 @@ export default function Dashboard() {
         posterUrl: item.posterUrl,
         sizeOnDisk: item.sizeOnDisk
       });
-      deletedRef.current.add(item.tmdbId);
+      deletedRef.current.add(item.type + '-' + item.tmdbId);
     } catch (err) {
       console.error(err);
     } finally {
@@ -349,7 +361,7 @@ export default function Dashboard() {
             <>
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
                 {paginatedQueue.map((item, idx) => (
-                  <div key={item.tmdbId} className="group relative bg-slate-900 rounded-xl overflow-hidden hover:shadow-[0_0_20px_rgba(34,211,238,0.15)] transition-all duration-300 hover:-translate-y-1 border border-slate-800 hover:border-cyan-500/30">
+                  <div key={item.type + '-' + item.tmdbId} className="group relative bg-slate-900 rounded-xl overflow-hidden hover:shadow-[0_0_20px_rgba(34,211,238,0.15)] transition-all duration-300 hover:-translate-y-1 border border-slate-800 hover:border-cyan-500/30">
                     <div className="aspect-2/3 w-full relative overflow-hidden bg-slate-800">
                       {item.posterUrl ? (
                         <img src={item.posterUrl} alt={item.title} className={`w-full h-full object-cover group-hover:scale-105 transition-transform duration-500 ${item.deleting ? 'opacity-30' : ''}`} />
@@ -365,41 +377,70 @@ export default function Dashboard() {
                         </div>
                       )}
                       
-                      {/* Overlay */}
-                      <div className="absolute inset-0 bg-linear-to-t from-black/90 via-black/40 to-transparent opacity-80" />
-                      
-                      {/* Rank tag */}
-                      <div className="absolute top-2 left-2 px-2 py-1 bg-black/60 backdrop-blur-md rounded text-xs font-mono font-bold text-cyan-400">
-                        #{startIndex + idx + 1}
-                      </div>
+                       {/* Overlay */}
+                       <div className="absolute inset-0 bg-linear-to-t from-black/90 via-black/40 to-transparent opacity-80" />
+                       
+                       {/* Rank tag */}
+                       <div className="absolute top-2 left-2 px-2 py-1 bg-black/60 backdrop-blur-md rounded text-xs font-mono font-bold text-cyan-400">
+                         #{startIndex + idx + 1}
+                       </div>
 
-                      {/* Actions */}
-                      <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity flex gap-2">
-                        <button 
-                          onClick={() => excludeItem(item)}
-                          title="Exclude from deletion" 
-                          className="p-2 bg-orange-500/80 hover:bg-orange-500 text-white rounded-lg backdrop-blur-sm transition-colors shadow-lg"
-                        >
-                          <ShieldBan className="w-4 h-4" />
-                        </button>
-                        <button 
-                          onClick={() => deleteItem(item)}
-                          title="Delete item" 
-                          className={`p-2 bg-red-500/80 hover:bg-red-500 text-white rounded-lg backdrop-blur-sm transition-colors shadow-lg ${item.deleting ? 'cursor-not-allowed' : 'cursor-pointer'}`}
-                        >
-                          {item.deleting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash className="w-4 h-4" />}
-                        </button>
-                      </div>
-                      
-                      {/* Info */}
-                      <div className="absolute bottom-0 left-0 right-0 p-3 translate-y-2 group-hover:translate-y-0 transition-transform">
-                        <h4 className="font-bold text-sm text-balance line-clamp-2 leading-tight drop-shadow-md">{item.title}</h4>
-                        <p className="text-xs text-slate-400 font-mono mt-1">Seen: {new Date(item.lastSeenAt).toLocaleDateString()}</p>
-                        <div className="flex items-center gap-1 mt-1.5">
-                          <span className={`text-[10px] uppercase font-bold px-1.5 py-0.5 rounded bg-slate-700/80 ${item.type === 'movie' ? 'text-blue-300' : 'text-purple-300'}`}>{item.type}</span>
-                          <span className={`text-[10px] uppercase font-bold px-1.5 py-0.5 rounded bg-slate-700/80 ${item.sizeOnDisk != 0 ? 'text-green-300' : 'text-red-300'}`}>{(item.sizeOnDisk / 1e9).toFixed(2)} GB</span>
+                       {/* Top-right hover actions: open-service + exclude/delete */}
+                       <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col gap-1 items-end">
+                         {/* Open-in-service */}
+                         <div className="flex gap-1">
+                           {item.plexId && serviceUrls.plexMachineId && serviceUrls.plexPublicUrl && (
+                             <a href={`${serviceUrls.plexPublicUrl}/web/index.html#!/server/${serviceUrls.plexMachineId}/details?key=%2Flibrary%2Fmetadata%2F${item.plexId}`}
+                               target="_blank" rel="noopener noreferrer" title="Open in Plex"
+                               className="px-2 py-1 bg-orange-500/80 hover:bg-orange-500 text-white rounded text-[10px] font-bold backdrop-blur-sm transition-colors"
+                               onClick={e => e.stopPropagation()}>Plex</a>
+                           )}
+                           {item.jellyfinId && serviceUrls.jellyfinPublicUrl && (
+                             <a href={`${serviceUrls.jellyfinPublicUrl}/web/index.html#!/details?id=${item.jellyfinId}`}
+                               target="_blank" rel="noopener noreferrer" title="Open in Jellyfin"
+                               className="px-2 py-1 bg-blue-500/80 hover:bg-blue-500 text-white rounded text-[10px] font-bold backdrop-blur-sm transition-colors"
+                               onClick={e => e.stopPropagation()}>Jelly</a>
+                           )}
+                           {item.type === 'movie' && item.radarrId && serviceUrls.radarrUrl && (
+                             <a href={`${serviceUrls.radarrUrl}/movie/${item.radarrId}`}
+                               target="_blank" rel="noopener noreferrer" title="Open in Radarr"
+                               className="px-2 py-1 bg-yellow-600/80 hover:bg-yellow-600 text-white rounded text-[10px] font-bold backdrop-blur-sm transition-colors"
+                               onClick={e => e.stopPropagation()}>Radarr</a>
+                           )}
+                           {item.type === 'show' && item.sonarrId && serviceUrls.sonarrUrl && (
+                             <a href={`${serviceUrls.sonarrUrl}/series/${item.sonarrId}`}
+                               target="_blank" rel="noopener noreferrer" title="Open in Sonarr"
+                               className="px-2 py-1 bg-teal-600/80 hover:bg-teal-600 text-white rounded text-[10px] font-bold backdrop-blur-sm transition-colors"
+                               onClick={e => e.stopPropagation()}>Sonarr</a>
+                           )}
+                         </div>
+                         {/* Exclude / Delete */}
+                         <div className="flex gap-1.5">
+                           <button onClick={() => excludeItem(item)} title="Exclude from deletion"
+                             className="p-2 bg-orange-500/80 hover:bg-orange-500 text-white rounded-lg backdrop-blur-sm transition-colors shadow-lg">
+                             <ShieldBan className="w-4 h-4" />
+                           </button>
+                           <button onClick={() => deleteItem(item)} title="Delete item"
+                             className={`p-2 bg-red-500/80 hover:bg-red-500 text-white rounded-lg backdrop-blur-sm transition-colors shadow-lg ${item.deleting ? 'cursor-not-allowed' : 'cursor-pointer'}`}>
+                             {item.deleting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash className="w-4 h-4" />}
+                           </button>
+                         </div>
+                       </div>
+                       
+                       {/* Info */}
+                        <div className="absolute bottom-0 left-0 right-0 p-3 translate-y-2 group-hover:translate-y-0 transition-transform">
+                          <h4 className="font-bold text-sm text-balance line-clamp-2 leading-tight drop-shadow-md">{item.title}</h4>
+                          <p className="text-xs text-slate-400 font-mono mt-1">Seen: {new Date(item.lastSeenAt).toLocaleDateString()}</p>
+                          {item.deletionCount != null && item.deletionCount > 0 && item.deltaDays != null && item.deltaDays > 0 && (
+                            <p className="text-xs text-amber-400 font-mono mt-0.5">+{item.deletionCount * item.deltaDays}d postponed</p>
+                          )}
+                          <div className="flex items-center gap-1 mt-1.5 flex-wrap">
+                            <span className={`text-[10px] uppercase font-bold px-1.5 py-0.5 rounded bg-slate-700/80 ${item.type === 'movie' ? 'text-blue-300' : 'text-purple-300'}`}>{item.type}</span>
+                            <span className={`text-[10px] uppercase font-bold px-1.5 py-0.5 rounded bg-slate-700/80 ${item.sizeOnDisk != 0 ? 'text-green-300' : 'text-red-300'}`}>{(item.sizeOnDisk / 1e9).toFixed(2)} GB</span>
+                            {item.plexId && <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-orange-600/70 text-white">P</span>}
+                            {item.jellyfinId && <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-blue-600/70 text-white">J</span>}
+                          </div>
                         </div>
-                      </div>
                     </div>
                   </div>
                 ))}

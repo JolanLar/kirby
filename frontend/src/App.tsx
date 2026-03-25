@@ -1,8 +1,9 @@
 import { BrowserRouter as Router, Routes, Route, Link } from 'react-router-dom';
-import { Database, Settings as SettingsIcon, ShieldBan } from 'lucide-react';
+import { Database, Settings as SettingsIcon, ShieldBan, Heart } from 'lucide-react';
 import Dashboard from './pages/Dashboard';
 import Settings from './pages/Settings';
 import Exclusions from './pages/Exclusions';
+import Favorites from './pages/Favorites';
 
 function App() {
   return (
@@ -26,6 +27,10 @@ function App() {
               <ShieldBan className="w-4 h-4 text-slate-400 group-hover:text-cyan-400 transition-colors" />
               Exclusions
             </Link>
+            <Link to="/favorites" className="flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-slate-700/50 transition-colors text-slate-300 hover:text-white group">
+              <Heart className="w-4 h-4 text-slate-400 group-hover:text-pink-400 transition-colors" />
+              Favorites
+            </Link>
             <Link to="/settings" className="flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-slate-700/50 transition-colors text-slate-300 hover:text-white group">
               <SettingsIcon className="w-4 h-4 text-slate-400 group-hover:text-cyan-400 transition-colors" />
               Settings
@@ -38,6 +43,7 @@ function App() {
           <Routes>
             <Route path="/" element={<Dashboard />} />
             <Route path="/exclusions" element={<Exclusions />} />
+            <Route path="/favorites" element={<Favorites />} />
             <Route path="/settings" element={<Settings />} />
           </Routes>
         </main>

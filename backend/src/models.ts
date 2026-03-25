@@ -10,12 +10,20 @@ export interface MediaItem {
   plexPath?: string;
   jellyfinPath?: string;
   source?: 'plex' | 'jellyfin';
+  // Deletion delta fields (attached by deletion.job.ts for frontend display)
+  deletionCount?: number;
+  deltaDays?: number;
+  _effectiveDate?: number;
+  // Arr IDs for deep links
+  radarrId?: string;
+  sonarrId?: string;
 }
 
 export interface SonarrSeries {
   id: number;
   tmdbId: string;
   title: string;
+  titleSlug: string;
   statistics: {
     sizeOnDisk: number;
   }

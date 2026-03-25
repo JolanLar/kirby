@@ -41,9 +41,9 @@ export default function Exclusions() {
     return () => { mounted = false; };
   }, []);
 
-  async function removeExclusion(tmdbId: string) {
+  async function removeExclusion(tmdbId: string, type: string) {
     try {
-      await axios.delete(`/api/exclusions/${tmdbId}`);
+      await axios.delete(`/api/exclusions/${type}/${tmdbId}`);
       fetchData();
     } catch (err) {
       console.error(err);
@@ -173,7 +173,7 @@ export default function Exclusions() {
           <>
             <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
               {paginated.map((item) => (
-              <div key={item.tmdbId} className="group relative bg-slate-900 rounded-xl overflow-hidden hover:shadow-[0_0_20px_rgba(239,68,68,0.15)] transition-all duration-300 hover:-translate-y-1 border border-slate-800 hover:border-red-500/30">
+              <div key={item.type + '-' + item.tmdbId} className="group relative bg-slate-900 rounded-xl overflow-hidden hover:shadow-[0_0_20px_rgba(239,68,68,0.15)] transition-all duration-300 hover:-translate-y-1 border border-slate-800 hover:border-red-500/30">
                 <div className="aspect-2/3 w-full relative overflow-hidden bg-slate-800">
                   {item.posterUrl ? (
                     <img src={item.posterUrl} alt={item.title} className="w-full h-full object-cover opacity-60 group-hover:opacity-100 transition-opacity duration-500 mix-blend-luminosity group-hover:mix-blend-normal" />
@@ -189,7 +189,7 @@ export default function Exclusions() {
                   {/* Actions */}
                   <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-black/40 backdrop-blur-sm">
                     <button 
-                      onClick={() => removeExclusion(item.tmdbId)}
+                      onClick={() => removeExclusion(item.tmdbId, item.type)}
                       title="Remove Exclusion" 
                       className="px-4 py-2 bg-emerald-500/80 hover:bg-emerald-500 text-white rounded-lg backdrop-blur-sm transition-colors shadow-lg flex items-center gap-2 font-medium"
                     >

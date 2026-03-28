@@ -22,8 +22,8 @@ export default function Login() {
     try {
       await axios.post('/api/auth/login', { username, password });
       await refresh();
-    } catch (err: any) {
-      setError(err.response?.data?.error || 'Login failed');
+    } catch (err) {
+      setError(axios.isAxiosError(err) ? (err.response?.data?.error ?? 'Login failed') : 'Login failed');
     } finally {
       setLoading(false);
     }

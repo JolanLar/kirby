@@ -399,9 +399,9 @@ export default function Settings() {
         setOauthTestStatus('error');
         setOauthTestMsg(data.error);
       }
-    } catch (err: any) {
+    } catch (err) {
       setOauthTestStatus('error');
-      setOauthTestMsg(err.response?.data?.error || err.message);
+      setOauthTestMsg(axios.isAxiosError(err) ? (err.response?.data?.error ?? err.message) : String(err));
     }
   }
 
@@ -422,8 +422,8 @@ export default function Settings() {
       setNewPassword('');
       setConfirmPassword('');
       await refreshAuth();
-    } catch (err: any) {
-      setCredsMsg({ type: 'error', text: err.response?.data?.error || 'Failed to update credentials' });
+    } catch (err) {
+      setCredsMsg({ type: 'error', text: axios.isAxiosError(err) ? (err.response?.data?.error ?? 'Failed to update credentials') : 'Failed to update credentials' });
     } finally {
       setCredsSaving(false);
     }

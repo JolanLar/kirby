@@ -4,24 +4,32 @@
   <img src="docs/assets/dashboard.png" alt="Kirby Dashboard" width="800"/>
 </p>
 
-Kirby is a powerful, centralized deletion and exclusion manager designed for sophisticated home media setups. It natively interfaces with **Plex**, **Jellyfin**, **Radarr**, **Sonarr**, and **qBittorrent** to help you keep your storage limits in check without lifting a finger.
+Kirby is a centralized deletion and exclusion manager for home media setups. It interfaces with **Plex**, **Jellyfin**, **Radarr**, **Sonarr**, and **qBittorrent** to keep your storage under control automatically.
 
 ---
 
 ## ✨ Features
 
-- **Automated Deletion Queue:** Keeps track of your unwatched or older media and intelligently purges it once designated storage thresholds are met.
-- **Smart Shield (Auto-Exclusions):** Tracks the deletion history of your library natively. If a movie or series hits your custom threshold of deletions over time, Kirby safely locks it away into the **Exclusions** list to prevent future re-deletions automatically.
-- **Favorite Detection:** Automatically detects media favorited by Plex and Jellyfin users and excludes it from deletion. Supports per-user targeting, cross-server aggregation, and an "Ignore" override for individual items.
-- **Multi-Server Ready:** Easily toggle paths and storage mapping across Plex and Jellyfin arrays.
-- **Authentication:** Built-in username/password login with secure JWT sessions. Supports SSO via any OIDC-compatible provider (Authentik, Keycloak, Auth0, Authelia, …).
-- **Dynamic Frontend:** Built with React & Vite + Tailwind, giving you native searching, filtering, sorting, and rapid pagination across all tabs.
+- **Automated Deletion Queue** — Ranks unwatched media by last-seen date and size, and purges it once your storage threshold is reached.
+- **Smart Shield (Auto-Exclusions)** — Tracks deletion history per item. Once a title is deleted more than a configurable number of times it is permanently excluded, preventing re-download cycles.
+- **Favorite Detection** — Protects media favorited by Plex and Jellyfin users. Supports per-user targeting, cross-server aggregation, and per-item "Ignore" overrides.
+- **Multi-Server Ready** — Maps paths across Plex, Jellyfin, Sonarr, and Radarr with auto-complete suggestions from each service.
+- **Authentication** — Built-in username/password login with JWT sessions. Supports SSO via any OIDC-compatible provider (Authentik, Keycloak, Auth0, Authelia, …).
+- **Dynamic Frontend** — Search, filter, sort, and paginate across all tabs. Contextual help tooltips on every settings field.
+
+---
+
+## ⚙️ How it works
+
+1. Kirby fetches your watch history from Plex and/or Jellyfin.
+2. It cross-references items against Radarr (movies) and Sonarr (shows) to get file paths and sizes.
+3. Items are ranked by a combination of last-seen date and storage impact.
+4. When free space on a configured storage falls below your target, the deletion job removes the lowest-ranked eligible items via Radarr/Sonarr (and optionally qBittorrent).
+5. Excluded items and favorites are never touched.
 
 ---
 
 ## 🐳 Docker Deployment
-
-The easiest way to run Kirby is via Docker Compose.
 
 ```yaml
 services:
@@ -41,9 +49,7 @@ services:
 docker-compose up -d
 ```
 
-Kirby will be available at `http://localhost:4000`.
-
-On first visit you will be prompted to create an admin account.
+Kirby is available at `http://localhost:4000`. On first visit you will be prompted to create an admin account.
 
 ---
 
@@ -51,40 +57,48 @@ On first visit you will be prompted to create an admin account.
 
 ### Username / Password
 
-On first run, navigate to `http://localhost:4000` and create your admin credentials. You can update them later in **Settings → Security**.
+On first run, create your admin credentials at `http://localhost:4000`. You can change them later in **Settings → Security**.
 
 ### SSO / OAuth2 (OIDC)
 
 Kirby supports any OIDC-compatible identity provider. Configure it in **Settings → SSO / OAuth2**.
 
-| Field | Description |
-|---|---|
-| **Issuer URL** | Base URL of your provider — Kirby appends `/.well-known/openid-configuration` |
-| **Client ID** | The application/client ID registered in your provider |
-| **Client Secret** | Client secret (required for confidential clients) |
-| **Scopes** | Space-separated scopes — default: `openid profile email` |
-| **Redirect URI override** | Leave empty; auto-derived from request headers (supports `X-Forwarded-Proto` / `X-Forwarded-Host`) |
+| Field                     | Description                                                                                |
+| ------------------------- | ------------------------------------------------------------------------------------------ |
+| **Issuer URL**            | Base URL of your provider — Kirby fetches `<issuer>/.well-known/openid-configuration`      |
+| **Client ID**             | The application/client ID registered in your provider                                      |
+| **Client Secret**         | Client secret (required for confidential clients)                                          |
+| **Scopes**                | Space-separated scopes — default: `openid profile email`                                   |
+| **Redirect URI override** | Leave empty — auto-derived from request headers (`X-Forwarded-Proto` / `X-Forwarded-Host`) |
 
-**Issuer URL examples:**
+**Issuer URL by provider:**
 
-| Provider | Issuer URL |
-|---|---|
+| Provider  | Issuer URL                                          |
+| --------- | --------------------------------------------------- |
 | Authentik | `https://auth.example.com/application/o/<app-slug>` |
-| Keycloak | `https://keycloak.example.com/realms/<realm>` |
-| Auth0 | `https://<tenant>.auth0.com` |
-| Authelia | `https://auth.example.com` |
+| Keycloak  | `https://keycloak.example.com/realms/<realm>`       |
+| Auth0     | `https://<tenant>.auth0.com`                        |
+| Authelia  | `https://auth.example.com`                          |
 
 Register `https://<your-kirby-host>/api/auth/oauth/callback` as the redirect URI in your provider.
 
-Use the **Test Connection** button in Settings to verify the discovery document is reachable before saving.
+The **Test Connection** button in Settings validates your current form values against the provider's discovery document — no need to save first.
 
 ---
 
 ## 📸 Screenshots
 
+### 📊 Dashboard
+
+The deletion queue ranked by priority. Sort by rank, title, last seen, or size. Use **Sync Now** to trigger an immediate queue refresh.
+
+<p align="center">
+  <img src="docs/assets/dashboard.png" alt="Kirby Dashboard" width="800"/>
+</p>
+
 ### 🖼️ Exclusions
 
-Visualize and manage your shielded media. Filter by items caught by the automatic shield rules.
+Permanently shielded items. Filter by auto-excluded (hit the deletion threshold) or manually added.
 
 <p align="center">
   <img src="docs/assets/exclusions.png" alt="Exclusions" width="800"/>
@@ -92,7 +106,7 @@ Visualize and manage your shielded media. Filter by items caught by the automati
 
 ### ❤️ Favorites
 
-Browse all media favorited across your Plex and Jellyfin servers. Source badges identify where each favorite originates. Hover any item to toggle its protection — "Ignore" re-enters it in the deletion queue, "Restore" re-enables the shield.
+All media favorited across your Plex and Jellyfin servers. Hover any item to toggle its protection — **Ignore** re-enters it in the deletion queue, **Restore** re-enables the shield.
 
 <p align="center">
   <img src="docs/assets/favorites.png" alt="Favorites" width="800"/>
@@ -100,7 +114,7 @@ Browse all media favorited across your Plex and Jellyfin servers. Source badges 
 
 ### ⚙️ Settings
 
-Connect everything from one place. Set free-space targets, service credentials, automation rules, and SSO configuration.
+Connect services, configure storage targets, automation rules, and SSO. Every field has a contextual help tooltip.
 
 <p align="center">
   <img src="docs/assets/settings.png" alt="Settings" width="800"/>
@@ -123,17 +137,9 @@ npm install --prefix frontend
 # Start backend (port 4000)
 npm run dev --prefix backend
 
-# Start frontend (port 5173)
+# Start frontend (port 5173, proxies /api → localhost:4000)
 npm run dev --prefix frontend
 ```
-
-Or use the convenience script:
-
-```bash
-./start.sh
-```
-
-The frontend dev server proxies `/api` requests to the backend at `localhost:4000`.
 
 ---
 

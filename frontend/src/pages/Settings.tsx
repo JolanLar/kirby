@@ -1,32 +1,45 @@
 import { useEffect, useState, useRef } from 'react';
 import axios from 'axios';
-import { Settings as SettingsIcon, Save, Server, Shield, HardDrive, CheckCircle2, XCircle, Loader2, Trash, HelpCircle, ExternalLink, Heart, ChevronRight, ChevronLeft, ChevronsRight, ChevronsLeft } from 'lucide-react';
+import { Settings as SettingsIcon, Save, Server, Shield, HardDrive, CheckCircle2, XCircle, Loader2, Trash, HelpCircle, ExternalLink, Heart, ChevronRight, ChevronLeft, ChevronsRight, ChevronsLeft, KeyRound, ShieldCheck } from 'lucide-react';
+import { useAuth } from '../contexts/AuthContext';
 
-const InputGroup = ({ 
-  label, 
-  name, 
-  value, 
-  onChange, 
-  type = 'text', 
+const Tooltip = ({ text }: { text: string }) => (
+  <div className="group relative inline-flex items-center">
+    <HelpCircle className="w-3.5 h-3.5 text-slate-500 hover:text-slate-300 cursor-help transition-colors" />
+    <div className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-72 p-3 bg-slate-700 border border-slate-600 rounded-lg text-xs text-slate-300 shadow-xl opacity-0 group-hover:opacity-100 transition-opacity z-50 leading-relaxed whitespace-pre-line">
+      {text}
+      <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-slate-700" />
+    </div>
+  </div>
+);
+
+const InputGroup = ({
+  label,
+  name,
+  value,
+  onChange,
+  type = 'text',
   placeholder = '',
   list,
   options,
   onFocus,
   className,
   helpUrl,
+  tooltip,
   disabled
-}: { 
-  label: string; 
-  name: string; 
-  value: string; 
-  onChange: (e: React.ChangeEvent<HTMLInputElement>) => void; 
-  type?: string; 
-  placeholder?: string; 
+}: {
+  label: string;
+  name: string;
+  value: string;
+  onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  type?: string;
+  placeholder?: string;
   list?: string;
   options?: string[];
   onFocus?: () => void;
   className?: string;
   helpUrl?: string;
+  tooltip?: string;
   disabled?: boolean;
 }) => {
   const [showDropdown, setShowDropdown] = useState(false);
@@ -46,10 +59,11 @@ const InputGroup = ({
     <div className={`flex flex-col gap-1.5 relative ${className}`} ref={containerRef}>
       <div className="flex items-center gap-2">
         <label className="text-sm font-medium text-slate-400">{label}</label>
+        {tooltip && <Tooltip text={tooltip} />}
         {helpUrl && (
-          <a 
-            href={helpUrl} 
-            target="_blank" 
+          <a
+            href={helpUrl}
+            target="_blank"
             rel="noopener noreferrer"
             className="text-slate-500 hover:text-cyan-400 transition-colors"
             title="How to find this?"
@@ -161,6 +175,16 @@ export default function Settings() {
   const [plexAuthLoading, setPlexAuthLoading] = useState(false);
   const [usersLoading, setUsersLoading] = useState(false);
 
+  const { username: currentUsername, refresh: refreshAuth } = useAuth();
+  const [newUsername, setNewUsername] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [credsSaving, setCredsSaving] = useState(false);
+  const [credsMsg, setCredsMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
+  const [oauthTestStatus, setOauthTestStatus] = useState<'idle' | 'testing' | 'ok' | 'error'>('idle');
+  const [oauthTestMsg, setOauthTestMsg] = useState('');
+
   useEffect(() => {
     function syncUserColumns(allUsers: string[], savedExcluded: string[]) {
       setExcludedUsers(savedExcluded.filter(u => allUsers.includes(u)));
@@ -225,6 +249,7 @@ export default function Settings() {
   function handleChange(e: React.ChangeEvent<HTMLInputElement>) {
     setSettings({ ...settings, [e.target.name]: e.target.value });
     setTestStatus({});
+    if (e.target.name.startsWith('oauth')) setOauthTestStatus('idle');
   }
 
   async function handleSave() {
@@ -359,6 +384,51 @@ export default function Settings() {
     }
   }
 
+  async function handleOAuthTest() {
+    setOauthTestStatus('testing');
+    setOauthTestMsg('');
+    try {
+      const params = new URLSearchParams();
+      if (settings.oauthIssuerUrl) params.set('issuerUrl', settings.oauthIssuerUrl);
+      if (settings.oauthClientId) params.set('clientId', settings.oauthClientId);
+      const { data } = await axios.get(`/api/auth/oauth/test?${params}`);
+      if (data.ok) {
+        setOauthTestStatus('ok');
+        setOauthTestMsg(`Connected — Issuer: ${data.issuer}\nCallback URL: ${data.redirectUri}`);
+      } else {
+        setOauthTestStatus('error');
+        setOauthTestMsg(data.error);
+      }
+    } catch (err: any) {
+      setOauthTestStatus('error');
+      setOauthTestMsg(err.response?.data?.error || err.message);
+    }
+  }
+
+  async function handleCredentialsSave() {
+    if (!newUsername && !newPassword) return;
+    if (newPassword && newPassword !== confirmPassword) {
+      setCredsMsg({ type: 'error', text: 'Passwords do not match' });
+      return;
+    }
+    setCredsSaving(true);
+    setCredsMsg(null);
+    try {
+      await axios.post('/api/auth/credentials', {
+        username: newUsername || currentUsername,
+        password: newPassword,
+      });
+      setCredsMsg({ type: 'success', text: 'Credentials updated' });
+      setNewPassword('');
+      setConfirmPassword('');
+      await refreshAuth();
+    } catch (err: any) {
+      setCredsMsg({ type: 'error', text: err.response?.data?.error || 'Failed to update credentials' });
+    } finally {
+      setCredsSaving(false);
+    }
+  }
+
   return (
     <div className="max-w-4xl mx-auto space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500 pb-12">
       <header className="mb-8 flex items-center justify-between">
@@ -397,21 +467,23 @@ export default function Settings() {
             Global Automation Rules
           </h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <InputGroup 
-              label="Auto-Exclude Deletion Threshold" 
-              name="autoExcludeThreshold" 
+            <InputGroup
+              label="Auto-Exclude Deletion Threshold"
+              name="autoExcludeThreshold"
               type="number"
-              value={settings.autoExcludeThreshold || '0'} 
-              onChange={handleChange} 
-              placeholder="e.g. 3 (0 to disable)" 
+              value={settings.autoExcludeThreshold || '0'}
+              onChange={handleChange}
+              placeholder="e.g. 3 (0 to disable)"
+              tooltip="Automatically add media to the exclusion list after it has been deleted this many times. Prevents the same item from being repeatedly re-downloaded and deleted. Set to 0 to disable."
             />
-            <InputGroup 
-              label="Deletion Delta Days" 
-              name="deletionDeltaDays" 
+            <InputGroup
+              label="Deletion Delta Days"
+              name="deletionDeltaDays"
               type="number"
-              value={settings.deletionDeltaDays || '0'} 
-              onChange={handleChange} 
-              placeholder="e.g. 7 (0 to disable)" 
+              value={settings.deletionDeltaDays || '0'}
+              onChange={handleChange}
+              placeholder="e.g. 7 (0 to disable)"
+              tooltip="Add this many days to a media's next eligible deletion date for each time it has previously been deleted. Gives recently-deleted items a grace period before being eligible again. Set to 0 to disable."
             />
           </div>
           <p className="text-xs text-slate-400 mt-3">Auto-Exclude: automatically exclude media deleted this many times. Deletion Delta: days added per deletion event to postpone re-deletion. Set to 0 to disable each.</p>
@@ -704,12 +776,13 @@ export default function Settings() {
             <div className="space-y-4">
                <h4 className="font-medium text-slate-300 border-b border-slate-700 pb-2">Jellyfin Integration</h4>
                <InputGroup label="Jellyfin URL" name="jellyfinUrl" value={settings.jellyfinUrl} onChange={handleChange} placeholder="http://192.168.50.1:8096" />
-               <InputGroup 
-                  label="Jellyfin API Key" 
-                  name="jellyfinApiKey" 
-                  value={settings.jellyfinApiKey} 
-                  onChange={handleChange} 
-                  type="password" 
+               <InputGroup
+                  label="Jellyfin API Key"
+                  name="jellyfinApiKey"
+                  value={settings.jellyfinApiKey}
+                  onChange={handleChange}
+                  type="password"
+                  tooltip="Found in Jellyfin Dashboard → Administration → API Keys. Click the + button to create a new key for Kirby."
                 />
                <InputGroup label="Jellyfin Public URL" name="jellyfinPublicUrl" value={settings.jellyfinPublicUrl} onChange={handleChange} placeholder="http://[IP_ADDRESS]" />
                <TestButton service="jellyfin" status={testStatus['jellyfin'] || 'idle'} onTest={handleTest} />
@@ -728,14 +801,14 @@ export default function Settings() {
             <div className="space-y-4">
                <h4 className="font-medium text-slate-300 border-b border-slate-700 pb-2">Sonarr (TV Shows)</h4>
                <InputGroup label="Sonarr URL" name="sonarrUrl" value={settings.sonarrUrl} onChange={handleChange} placeholder="http://192.168.1.100:8989" />
-               <InputGroup label="Sonarr API Key" name="sonarrApiKey" value={settings.sonarrApiKey} onChange={handleChange} type="password" />
+               <InputGroup label="Sonarr API Key" name="sonarrApiKey" value={settings.sonarrApiKey} onChange={handleChange} type="password" tooltip="Found in Sonarr → Settings → General → Security → API Key." />
                <TestButton service="sonarr" status={testStatus['sonarr'] || 'idle'} onTest={handleTest} />
             </div>
             
             <div className="space-y-4">
                <h4 className="font-medium text-slate-300 border-b border-slate-700 pb-2">Radarr (Movies)</h4>
                <InputGroup label="Radarr URL" name="radarrUrl" value={settings.radarrUrl} onChange={handleChange} placeholder="http://192.168.1.100:7878" />
-               <InputGroup label="Radarr API Key" name="radarrApiKey" value={settings.radarrApiKey} onChange={handleChange} type="password" />
+               <InputGroup label="Radarr API Key" name="radarrApiKey" value={settings.radarrApiKey} onChange={handleChange} type="password" tooltip="Found in Radarr → Settings → General → Security → API Key." />
                <TestButton service="radarr" status={testStatus['radarr'] || 'idle'} onTest={handleTest} />
             </div>
 
@@ -747,6 +820,141 @@ export default function Settings() {
                <TestButton service="qbittorrent" status={testStatus['qbittorrent'] || 'idle'} onTest={handleTest} />
             </div>
           </div>
+        </section>
+
+        {/* OAuth / SSO */}
+        <section className="bg-slate-800/50 backdrop-blur-md rounded-2xl p-6 border border-slate-700/50 shadow-xl">
+          <h3 className="text-xl font-semibold mb-2 flex items-center gap-2 text-slate-200">
+            <ShieldCheck className="w-5 h-5 text-cyan-400" />
+            SSO / OAuth2
+          </h3>
+          <p className="text-xs text-slate-400 mb-6">
+            Compatible with Authentik, Keycloak, Auth0 and any OIDC provider.
+            Register <span className="font-mono text-slate-300">{window.location.origin}/api/auth/oauth/callback</span> as the redirect URI in your provider.
+          </p>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <InputGroup
+              label="Issuer URL"
+              name="oauthIssuerUrl"
+              value={settings.oauthIssuerUrl || ''}
+              onChange={handleChange}
+              placeholder="https://auth.example.com/application/o/kirby"
+              tooltip={"The base URL of your OIDC provider. Kirby appends /.well-known/openid-configuration to fetch the discovery document.\n\nAuthentik: https://auth.example.com/application/o/<app-slug>\nKeycloak: https://keycloak.example.com/realms/<realm>\nAuth0: https://<tenant>.auth0.com\nAuthelia: https://auth.example.com"}
+            />
+            <InputGroup
+              label="Client ID"
+              name="oauthClientId"
+              value={settings.oauthClientId || ''}
+              onChange={handleChange}
+              placeholder="kirby"
+              tooltip="The client / application ID from your identity provider. Created when you register Kirby as an OAuth2 application."
+            />
+            <InputGroup
+              label="Client Secret"
+              name="oauthClientSecret"
+              type="password"
+              value={settings.oauthClientSecret || ''}
+              onChange={handleChange}
+              placeholder="••••••••••••"
+              tooltip="The client secret generated by your identity provider. Required for confidential clients (most providers)."
+            />
+            <InputGroup
+              label="Scopes"
+              name="oauthScopes"
+              value={settings.oauthScopes || 'openid profile email'}
+              onChange={handleChange}
+              placeholder="openid profile email"
+              tooltip={"Space-separated OAuth2 scopes to request.\n\nopenid — required for OIDC\nprofile — provides preferred_username / name claims\nemail — provides email claim\n\nThese claims are used (in order) to derive the Kirby username."}
+            />
+            <div className="md:col-span-2 flex flex-col gap-1.5">
+              <div className="flex items-center gap-2">
+                <label className="text-sm font-medium text-slate-400">Redirect URI override <span className="text-slate-600 font-normal">(optional)</span></label>
+                <Tooltip text={"Leave empty — Kirby auto-derives the callback URL from the incoming request headers (including X-Forwarded-Proto / X-Forwarded-Host set by reverse proxies).\n\nOnly set this if auto-detection produces the wrong URL, e.g. behind a non-standard proxy configuration."} />
+              </div>
+              <input
+                type="text"
+                name="oauthRedirectUri"
+                value={settings.oauthRedirectUri || ''}
+                onChange={handleChange}
+                placeholder={`${window.location.origin}/api/auth/oauth/callback`}
+                autoComplete="off"
+                className="px-4 py-2.5 bg-slate-900 border border-slate-700/50 rounded-lg text-slate-200 focus:outline-none focus:ring-2 focus:ring-cyan-500/50 focus:border-cyan-500 transition-all font-mono text-sm placeholder:text-slate-600 w-full"
+              />
+              <p className="text-xs text-slate-500">Register this URL in your provider: <span className="font-mono text-slate-400">{window.location.origin}/api/auth/oauth/callback</span></p>
+            </div>
+          </div>
+
+          <div className="mt-4 flex flex-col gap-2">
+            <button
+              onClick={handleOAuthTest}
+              disabled={oauthTestStatus === 'testing'}
+              className="flex items-center gap-2 px-4 py-2 bg-slate-700 hover:bg-slate-600 text-slate-200 rounded-lg text-sm font-semibold transition-colors border border-slate-600 disabled:opacity-50 w-fit"
+            >
+              {oauthTestStatus === 'testing'
+                ? <><Loader2 className="w-4 h-4 animate-spin" /> Testing…</>
+                : oauthTestStatus === 'ok'
+                ? <><CheckCircle2 className="w-4 h-4 text-emerald-400" /> Connected</>
+                : oauthTestStatus === 'error'
+                ? <><XCircle className="w-4 h-4 text-red-400" /> Failed</>
+                : <><ShieldCheck className="w-4 h-4" /> Test Connection</>
+              }
+            </button>
+            {oauthTestMsg && (
+              <pre className={`text-xs font-mono p-3 rounded-lg whitespace-pre-wrap ${oauthTestStatus === 'ok' ? 'bg-emerald-500/10 text-emerald-300 border border-emerald-500/30' : 'bg-red-500/10 text-red-300 border border-red-500/30'}`}>
+                {oauthTestMsg}
+              </pre>
+            )}
+          </div>
+        </section>
+
+        {/* Security */}
+        <section className="bg-slate-800/50 backdrop-blur-md rounded-2xl p-6 border border-slate-700/50 shadow-xl">
+          <h3 className="text-xl font-semibold mb-6 flex items-center gap-2 text-slate-200">
+            <KeyRound className="w-5 h-5 text-cyan-400" />
+            Security
+          </h3>
+
+          {credsMsg && (
+            <div className={`mb-4 p-3 rounded-lg text-sm text-center font-medium ${credsMsg.type === 'success' ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/50' : 'bg-red-500/20 text-red-400 border border-red-500/50'}`}>
+              {credsMsg.text}
+            </div>
+          )}
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <InputGroup
+              label="Username"
+              name="newUsername"
+              value={newUsername}
+              onChange={e => setNewUsername(e.target.value)}
+              placeholder={currentUsername || 'admin'}
+            />
+            <div />
+            <InputGroup
+              label="New Password"
+              name="newPassword"
+              type="password"
+              value={newPassword}
+              onChange={e => setNewPassword(e.target.value)}
+              placeholder="••••••••"
+            />
+            <InputGroup
+              label="Confirm Password"
+              name="confirmPassword"
+              type="password"
+              value={confirmPassword}
+              onChange={e => setConfirmPassword(e.target.value)}
+              placeholder="••••••••"
+            />
+          </div>
+
+          <button
+            onClick={handleCredentialsSave}
+            disabled={credsSaving || (!newUsername && !newPassword)}
+            className="mt-4 px-5 py-2 bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-400 rounded-xl text-sm font-semibold transition-colors disabled:opacity-40 flex items-center gap-2"
+          >
+            {credsSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <KeyRound className="w-4 h-4" />}
+            Update Credentials
+          </button>
         </section>
 
       </div>

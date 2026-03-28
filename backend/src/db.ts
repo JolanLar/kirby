@@ -249,6 +249,10 @@ export function removeStaleFavorites(currentKeys: string[]) {
   }
 }
 
+export function updateFavoriteLastSeen(tmdbId: string, type: string, lastSeenAt: number) {
+  db.prepare('UPDATE favorites SET lastSeenAt = ? WHERE tmdbId = ? AND type = ? AND lastSeenAt < ?').run(lastSeenAt, tmdbId, type, lastSeenAt);
+}
+
 export function setIgnoreFavorite(tmdbId: string, type: string, ignore: boolean) {
   db.prepare('UPDATE favorites SET ignoreFavorite = ? WHERE tmdbId = ? AND type = ?').run(ignore ? 1 : 0, tmdbId, type);
 }

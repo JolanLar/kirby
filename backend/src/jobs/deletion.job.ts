@@ -4,10 +4,16 @@ import { getJellyfinItems, deleteJellyfinItem, getJellyfinFavorites } from '../s
 import { deleteMovieFromRadarr, getMoviesFromRadarr, searchRadarrMovie, getDownloadIdsFromRadarr } from '../services/radarr.service';
 import { deleteShowFromSonarr, getShowsFromSonarr, searchSonarrSerie, getDownloadIdsFromSonarr } from '../services/sonarr.service';
 import { deleteFromQBittorrent } from '../services/qbittorrent.service';
-import { isExcluded, getStorages, recordDeletion, getDeleteHistoryCounts, getSetting, addExclusion, isFavoritedAndNotIgnored, upsertFavorite, removeStaleFavorites } from '../db';
+import { isExcluded, getStorages, recordDeletion, getDeleteHistoryCounts, getSetting, addExclusion, isFavoritedAndNotIgnored, upsertFavorite, removeStaleFavorites, updateFavoriteLastSeen } from '../db';
 import { MediaItem } from '../models';
 
 export let deletionQueue: Record<string, MediaItem[]> = {};
+
+let refreshPromise: Promise<Record<string, MediaItem[]>> | null = null;
+
+export function isQueueRefreshing(): boolean {
+  return refreshPromise !== null;
+}
 
 export function removeFromQueue(tmdbId: string, type: string) {
   for (const key of Object.keys(deletionQueue)) {
@@ -100,6 +106,12 @@ async function fetchAndRankItems(): Promise<MediaItem[]> {
     }
   }
 
+  // Back-fill lastSeenAt for any item that appears in the favorites table.
+  // Favorited items are excluded from the queue so their lastSeenAt is never updated otherwise.
+  for (const item of Object.values(uniqueItems)) {
+    if (item.lastSeenAt > 0) updateFavoriteLastSeen(item.tmdbId, item.type, item.lastSeenAt);
+  }
+
   const threshold = parseInt(getSetting('autoExcludeThreshold', '0'), 10);
   const deleteDeltaDays = parseInt(getSetting('deletionDeltaDays', '0'), 10);
   const excludeFavorites = getSetting('excludeFavorites', 'false') === 'true';
@@ -134,7 +146,7 @@ async function fetchAndRankItems(): Promise<MediaItem[]> {
   return sorted;
 }
 
-export async function refreshQueue(): Promise<Record<string, MediaItem[]>> {
+async function doRefreshQueue(): Promise<Record<string, MediaItem[]>> {
   await syncFavorites();
   getPlexMachineId().catch(() => {}); // Keep plexMachineId setting current for frontend links
   const sortedItems = await fetchAndRankItems();
@@ -167,6 +179,12 @@ export async function refreshQueue(): Promise<Record<string, MediaItem[]>> {
 
   deletionQueue = newQueue;
   return newQueue;
+}
+
+export function refreshQueue(): Promise<Record<string, MediaItem[]>> {
+  if (refreshPromise) return refreshPromise;
+  refreshPromise = doRefreshQueue().finally(() => { refreshPromise = null; });
+  return refreshPromise;
 }
 
 export async function processDeletion() {

@@ -288,6 +288,18 @@ export async function getPlexFavorites(includeUsers?: string[]): Promise<Favorit
   }
 }
 
+export async function validatePlexToken(token: string): Promise<{ username: string } | null> {
+  try {
+    const res = await axios.get('https://plex.tv/api/v2/user', {
+      headers: { ...PLEX_HEADERS, 'X-Plex-Token': token }
+    });
+    const username = res.data?.username || res.data?.title || 'plex-user';
+    return { username };
+  } catch {
+    return null;
+  }
+}
+
 // Get all possible mapping paths (e.g. /media/raid/movies -> ["/media/raid/movies", "/media/raid", "/media"])
 export async function getMappingPaths(url: string = getSetting('plexUrl'), token: string = getSetting('plexToken')): Promise<string[]> {
   const paths = await getPlexPaths(url, token);

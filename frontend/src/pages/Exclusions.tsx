@@ -162,6 +162,7 @@ export default function Exclusions() {
                   info={
                     <>
                       <h4 className="font-bold text-sm text-balance line-clamp-2 leading-tight drop-shadow-md text-red-50">{item.title}</h4>
+                        <p className="text-xs text-slate-400 font-mono mt-1">Seen: {new Date(item.lastSeenAt).toLocaleDateString()}</p>
                       <div className="flex items-center gap-1 mt-1.5 flex-wrap">
                         <span className="text-[10px] uppercase font-bold px-1.5 py-0.5 rounded bg-red-900/80 text-red-300">{item.type}</span>
                         {item.isAuto === 1 && (

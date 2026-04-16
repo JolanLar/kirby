@@ -11,7 +11,7 @@ import { getMappingPaths as getSonarrMappingPaths } from './services/sonarr.serv
 import { getMappingPaths as getJellyfinMappingPaths, getJellyfinUsers } from './services/jellyfin.service';
 import { getPlexPin, getPlexToken, getPlexResources, getMappingPaths as getPlexMappingPaths, getPlexUsers } from './services/plex.service';
 import { getDiscovery, testDiscovery, invalidateDiscoveryCache, generateCodeVerifier, generateCodeChallenge, createState, consumeState, isOAuthEnabled, extractUsername } from './services/oauth.service';
-import { startDeletionJob, deletionQueue, removeFromQueue, refreshQueue, deleteItem, isQueueRefreshing } from './jobs/deletion.job';
+import { startDeletionJob, deletionQueue, removeFromQueue, refreshQueue, deleteItem, isQueueRefreshing, getDeletionJobStatus, restartDeletionJob } from './jobs/deletion.job';
 import { requireAuth, signToken, verifyToken, hashPassword, checkPassword } from './auth';
 
 const app = express();
@@ -194,7 +194,7 @@ app.use('/api', requireAuth);
 app.get('/api/status', async (_req, res) => {
   const storages = getStorages();
   const diskStatuses = await Promise.all(storages.map(s => getDiskStatus(s)));
-  res.json({ storages: diskStatuses, syncing: isQueueRefreshing() });
+  res.json({ storages: diskStatuses, syncing: isQueueRefreshing(), scheduler: getDeletionJobStatus() });
 });
 
 // --- Settings API ---
@@ -208,13 +208,16 @@ app.get('/api/settings', (_req, res) => {
 app.post('/api/settings', (req, res) => {
   const settings = req.body;
   let oauthChanged = false;
+  let schedulerChanged = false;
   for (const [key, value] of Object.entries(settings)) {
     if (typeof value === 'string') {
       setSetting(key, value);
       if (key.startsWith('oauth')) oauthChanged = true;
+      if (key === 'deletionIntervalMinutes') schedulerChanged = true;
     }
   }
   if (oauthChanged) invalidateDiscoveryCache();
+  if (schedulerChanged) restartDeletionJob();
   res.json({ success: true });
 });
 

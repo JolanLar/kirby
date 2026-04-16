@@ -11,8 +11,10 @@ Kirby is a centralized deletion and exclusion manager for home media setups. It 
 ## ✨ Features
 
 - **Automated Deletion Queue** — Ranks unwatched media by last-seen date and size, and purges it once your storage threshold is reached.
+- **Configurable Deletion Cadence** — Tune how often Kirby evaluates storage pressure and performs the next automatic cleanup pass.
 - **Smart Shield (Auto-Exclusions)** — Tracks deletion history per item. Once a title is deleted more than a configurable number of times it is permanently excluded, preventing re-download cycles.
 - **Favorite Detection** — Protects media favorited by Plex and Jellyfin users. Supports per-user targeting, cross-server aggregation, and per-item "Ignore" overrides.
+- **Dry-Run Mode** — Safely validate your queue, timing, and UI against real data without deleting anything from Plex, Jellyfin, Radarr, Sonarr, or qBittorrent.
 - **Multi-Server Ready** — Maps paths across Plex, Jellyfin, Sonarr, and Radarr with auto-complete suggestions from each service.
 - **Authentication** — Built-in username/password login with JWT sessions. Supports SSO via any OIDC-compatible provider (Authentik, Keycloak, Auth0, Authelia, …).
 - **Dynamic Frontend** — Search, filter, sort, and paginate across all tabs. Contextual help tooltips on every settings field.
@@ -26,6 +28,7 @@ Kirby is a centralized deletion and exclusion manager for home media setups. It 
 3. Items are ranked by a combination of last-seen date and storage impact.
 4. When free space on a configured storage falls below your target, the deletion job removes the lowest-ranked eligible items via Radarr/Sonarr (and optionally qBittorrent).
 5. Excluded items and favorites are never touched.
+6. In dry-run mode, the same workflow is simulated and logged, but no external deletion calls are made.
 
 ---
 
@@ -50,6 +53,14 @@ docker-compose up -d
 ```
 
 Kirby is available at `http://localhost:4000`. On first visit you will be prompted to create an admin account.
+
+### Dry-run / Preview deployment
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.dry-run.yml up -d
+```
+
+This enables `DRY_RUN=true`, which keeps queue refreshes and deletion history intact while turning delete actions into simulations.
 
 ---
 
@@ -90,7 +101,7 @@ The **Test Connection** button in Settings validates your current form values ag
 
 ### 📊 Dashboard
 
-The deletion queue ranked by priority. Sort by rank, title, last seen, or size. Use **Sync Now** to trigger an immediate queue refresh.
+The deletion queue ranked by priority. Sort by rank, title, last seen, or size, and track the countdown until the next automatic cleanup pass. Use **Sync Now** to trigger an immediate queue refresh.
 
 <p align="center">
   <img src="docs/assets/dashboard.png" alt="Kirby Dashboard" width="800"/>

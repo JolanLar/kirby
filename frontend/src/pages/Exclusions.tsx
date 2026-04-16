@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useMemo } from 'react';
 import axios from 'axios';
 import { ShieldBan, ShieldCheck, Bot } from 'lucide-react';
 import SearchInput from '../components/SearchInput';
@@ -28,7 +28,7 @@ export default function Exclusions() {
 
   const [searchQuery, setSearchQuery] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
-  const [pageSize, setPageSize] = useState(48);
+  const [pageSize, setPageSize] = useState(24);
 
   const [showAutoOnly, setShowAutoOnly] = useState(false);
   const [sortBy, setSortBy] = useState('createdAt');
@@ -60,32 +60,34 @@ export default function Exclusions() {
     }
   }
 
-  let filtered = exclusions;
+  const filtered = useMemo(() => {
+    let result = exclusions;
 
-  if (showAutoOnly) {
-    filtered = filtered.filter(item => item.isAuto === 1);
-  }
-
-  if (searchQuery) {
-    filtered = filtered.filter(item => item.title.toLowerCase().includes(searchQuery.toLowerCase()));
-  }
-
-  filtered = [...filtered].sort((a, b) => {
-    let cmp = 0;
-    if (sortBy === 'title') {
-      cmp = a.title.localeCompare(b.title);
-    } else if (sortBy === 'lastSeenAt') {
-      cmp = (a.lastSeenAt || 0) - (b.lastSeenAt || 0);
-    } else {
-      cmp = String(a.createdAt || '').localeCompare(String(b.createdAt || ''));
+    if (showAutoOnly) {
+      result = result.filter(item => item.isAuto === 1);
     }
-    return sortOrder === 'asc' ? cmp : -cmp;
-  });
+
+    if (searchQuery) {
+      result = result.filter(item => item.title.toLowerCase().includes(searchQuery.toLowerCase()));
+    }
+
+    return [...result].sort((a, b) => {
+      let cmp = 0;
+      if (sortBy === 'title') {
+        cmp = a.title.localeCompare(b.title);
+      } else if (sortBy === 'lastSeenAt') {
+        cmp = (a.lastSeenAt || 0) - (b.lastSeenAt || 0);
+      } else {
+        cmp = String(a.createdAt || '').localeCompare(String(b.createdAt || ''));
+      }
+      return sortOrder === 'asc' ? cmp : -cmp;
+    });
+  }, [exclusions, showAutoOnly, searchQuery, sortBy, sortOrder]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
   const validPage = Math.min(currentPage, totalPages);
   const startIndex = (validPage - 1) * pageSize;
-  const paginated = filtered.slice(startIndex, startIndex + pageSize);
+  const paginated = useMemo(() => filtered.slice(startIndex, startIndex + pageSize), [filtered, pageSize, startIndex]);
 
   return (
     <div className="max-w-7xl mx-auto space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500 pb-12">

@@ -1,4 +1,4 @@
-import { type ReactNode } from 'react';
+import { memo, type ReactNode } from 'react';
 import { Loader2 } from 'lucide-react';
 
 interface MediaCardProps {
@@ -13,7 +13,7 @@ interface MediaCardProps {
   info: ReactNode;
 }
 
-export default function MediaCard({
+function MediaCard({
   posterUrl,
   title,
   loading,
@@ -25,13 +25,16 @@ export default function MediaCard({
   info,
 }: MediaCardProps) {
   return (
-    <div className={`group relative bg-slate-900 rounded-xl overflow-hidden transition-all duration-300 hover:-translate-y-1 border ${containerClass}`}>
+    <div className={`media-card-shell group relative bg-slate-900 rounded-xl overflow-hidden transition-all duration-200 hover:-translate-y-0.5 border transform-gpu ${containerClass}`}>
       <div className="aspect-2/3 w-full relative overflow-hidden bg-slate-800">
         {posterUrl ? (
           <img
             src={posterUrl}
             alt={title}
-            className={`w-full h-full object-cover transition-all duration-500 ${imageClass}`}
+            loading="lazy"
+            decoding="async"
+            draggable={false}
+            className={`w-full h-full object-cover transition-all duration-300 transform-gpu ${imageClass}`}
           />
         ) : (
           <div className="w-full h-full flex items-center justify-center p-4 text-center">
@@ -67,3 +70,5 @@ export default function MediaCard({
     </div>
   );
 }
+
+export default memo(MediaCard);

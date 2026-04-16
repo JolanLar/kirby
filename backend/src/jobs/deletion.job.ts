@@ -10,6 +10,70 @@ import { MediaItem } from '../models';
 export let deletionQueue: Record<string, MediaItem[]> = {};
 
 let refreshPromise: Promise<Record<string, MediaItem[]>> | null = null;
+let deletionTimer: NodeJS.Timeout | null = null;
+let schedulerRunning = false;
+let lastRunStartedAt: number | null = null;
+let lastRunCompletedAt: number | null = null;
+let nextRunAt: number | null = null;
+
+const DEFAULT_DELETION_INTERVAL_MINUTES = 5;
+const MIN_DELETION_INTERVAL_MINUTES = 1;
+
+function getDeletionIntervalMinutes(): number {
+  const parsed = parseInt(getSetting('deletionIntervalMinutes', String(DEFAULT_DELETION_INTERVAL_MINUTES)), 10);
+  if (Number.isNaN(parsed)) return DEFAULT_DELETION_INTERVAL_MINUTES;
+  return Math.max(MIN_DELETION_INTERVAL_MINUTES, parsed);
+}
+
+function scheduleNextDeletionRun(delayMs = getDeletionIntervalMinutes() * 60 * 1000) {
+  if (deletionTimer) clearTimeout(deletionTimer);
+  nextRunAt = Date.now() + delayMs;
+  deletionTimer = setTimeout(() => {
+    runDeletionCycle().catch(err => {
+      console.error('[Job] Unhandled deletion cycle error:', err);
+      scheduleNextDeletionRun();
+    });
+  }, delayMs);
+  deletionTimer.unref?.();
+}
+
+async function runDeletionCycle() {
+  schedulerRunning = true;
+  nextRunAt = null;
+  lastRunStartedAt = Date.now();
+  try {
+    await processDeletion();
+  } finally {
+    schedulerRunning = false;
+    lastRunCompletedAt = Date.now();
+    scheduleNextDeletionRun();
+  }
+}
+
+function isDryRunEnabled(): boolean {
+  return ['1', 'true', 'yes', 'on'].includes(String(process.env.DRY_RUN || '').toLowerCase());
+}
+
+export function getDeletionJobStatus() {
+  return {
+    intervalMinutes: getDeletionIntervalMinutes(),
+    nextRunAt,
+    lastRunStartedAt,
+    lastRunCompletedAt,
+    running: schedulerRunning,
+    dryRun: isDryRunEnabled(),
+  };
+}
+
+export function restartDeletionJob() {
+  if (deletionTimer) {
+    clearTimeout(deletionTimer);
+    deletionTimer = null;
+  }
+  if (!schedulerRunning) {
+    scheduleNextDeletionRun();
+  }
+}
 
 export function isQueueRefreshing(): boolean {
   return refreshPromise !== null;
@@ -232,19 +296,25 @@ export async function processDeletion() {
 }
 
 export async function deleteItem(item: MediaItem) {
+      if (isDryRunEnabled()) {
+        console.log(`[Dry Run] Would delete ${item.type}: ${item.title}`);
+        recordDeletion(item);
+        return true;
+      }
+
       if (item.type === 'show') {
         const serie = await searchSonarrSerie(item);
         if (serie) {
           const hashes = await getDownloadIdsFromSonarr(serie);
-          hashes.forEach(await deleteFromQBittorrent)
+          await Promise.all(hashes.map(hash => deleteFromQBittorrent(hash)));
           await deleteShowFromSonarr(serie);
         }
       } else {
-        const movie = await searchRadarrMovie(item)
+        const movie = await searchRadarrMovie(item);
         if (movie) {
-          const hashes = await getDownloadIdsFromRadarr(movie)
-          hashes.forEach(await deleteFromQBittorrent)
-          await deleteMovieFromRadarr(movie)
+          const hashes = await getDownloadIdsFromRadarr(movie);
+          await Promise.all(hashes.map(hash => deleteFromQBittorrent(hash)));
+          await deleteMovieFromRadarr(movie);
         }
       }
 
@@ -261,7 +331,8 @@ export async function deleteItem(item: MediaItem) {
 }
 
 export function startDeletionJob() {
-  // Run immediately then every 5 minutes
-  processDeletion();
-  setInterval(processDeletion, 5 * 60 * 1000);
+  runDeletionCycle().catch(err => {
+    console.error('[Job] Failed to start deletion job:', err);
+    scheduleNextDeletionRun();
+  });
 }

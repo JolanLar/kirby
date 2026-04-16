@@ -1,6 +1,6 @@
-import { useEffect, useState, useCallback, useRef } from 'react';
+import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import axios from 'axios';
-import { HardDrive, AlertTriangle, ShieldBan, RefreshCw, Trash, Loader2 } from 'lucide-react';
+import { HardDrive, AlertTriangle, ShieldBan, RefreshCw, Trash, Loader2, Clock3, TestTube2 } from 'lucide-react';
 import SearchInput from '../components/SearchInput';
 import PageSizeSelect from '../components/PageSizeSelect';
 import SortSelect from '../components/SortSelect';
@@ -36,12 +36,43 @@ interface StorageConfig {
   targetFreeSpace: number;
 }
 
+interface SchedulerStatus {
+  intervalMinutes: number;
+  nextRunAt: number | null;
+  lastRunStartedAt: number | null;
+  lastRunCompletedAt: number | null;
+  running: boolean;
+  dryRun: boolean;
+}
+
 const SORT_OPTIONS = [
   { value: 'rank', label: 'Queue Order' },
   { value: 'title', label: 'Title' },
   { value: 'lastSeenAt', label: 'Last Seen' },
   { value: 'size', label: 'Size' },
 ];
+
+function formatCountdown(ms: number | null) {
+  if (ms == null) return 'Waiting…';
+  if (ms <= 0) return 'Any moment now';
+
+  const totalSeconds = Math.ceil(ms / 1000);
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+
+  if (hours > 0) return `${hours}h ${minutes}m ${seconds}s`;
+  if (minutes > 0) return `${minutes}m ${seconds}s`;
+  return `${seconds}s`;
+}
+
+function formatLastRun(timestamp: number | null) {
+  if (!timestamp) return 'Not yet';
+  return new Date(timestamp).toLocaleTimeString([], {
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
 
 export default function Dashboard() {
   const [diskStatuses, setDiskStatuses] = useState<DiskStatus[]>([]);
@@ -50,10 +81,12 @@ export default function Dashboard() {
   const [activeTab, setActiveTab] = useState<string>('');
   const [searchQuery, setSearchQuery] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
-  const [pageSize, setPageSize] = useState(48);
+  const [pageSize, setPageSize] = useState(24);
   const [sortBy, setSortBy] = useState('rank');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
   const [serviceUrls, setServiceUrls] = useState({ plexPublicUrl: '', plexMachineId: '', jellyfinPublicUrl: '', radarrUrl: '', sonarrUrl: '' });
+  const [scheduler, setScheduler] = useState<SchedulerStatus | null>(null);
+  const [now, setNow] = useState(() => Date.now());
 
   const disableAutoRefresh = useRef(false);
   const pendingOperations = useRef(0);
@@ -69,6 +102,7 @@ export default function Dashboard() {
       const dbRes = await axios.get('/api/status');
       setDiskStatuses(dbRes.data.storages || []);
       setBackendSyncing(dbRes.data.syncing ?? false);
+      setScheduler(dbRes.data.scheduler ?? null);
 
       const qRes = await axios.get('/api/deletion-queue');
       setQueues(prev => {
@@ -94,7 +128,7 @@ export default function Dashboard() {
           setStorageConfigs(parsed);
           setActiveTab(prev => (prev || (parsed.length > 0 ? parsed[0].id : '')));
         } catch (e) {
-          console.error("Failed to parse storage configs:", e);
+          console.error('Failed to parse storage configs:', e);
           setStorageConfigs([]);
           setActiveTab('');
         }
@@ -122,6 +156,11 @@ export default function Dashboard() {
     const interval = setInterval(() => { if (!disableAutoRefresh.current) fetchData(); }, 10000);
     return () => { clearInterval(interval); };
   }, [fetchData]);
+
+  useEffect(() => {
+    const interval = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(interval);
+  }, []);
 
   function removeItemFromQueues(item: MediaItem) {
     setQueues(prev => {
@@ -201,6 +240,67 @@ export default function Dashboard() {
     }
   }
 
+  const activeConfig = useMemo(
+    () => storageConfigs.find(s => s.id === activeTab) || storageConfigs[0],
+    [activeTab, storageConfigs],
+  );
+
+  const activeDisk = useMemo(
+    () => diskStatuses.find(d => d.storageId === activeConfig?.id),
+    [activeConfig, diskStatuses],
+  );
+
+  const activeQueue = useMemo(
+    () => (activeConfig ? (queues[activeConfig.id] || []) : []),
+    [activeConfig, queues],
+  );
+
+  const targetFreeSpace = activeConfig?.targetFreeSpace || 100;
+  const isExceeded = (activeDisk?.freeBytes ?? 0) < targetFreeSpace;
+
+  const filteredQueue = useMemo(() => {
+    const rankedQueue = activeQueue.map((item, idx) => ({ ...item, rank: idx + 1 }));
+    return rankedQueue
+      .filter(item => item.title.toLowerCase().includes(searchQuery.toLowerCase()))
+      .sort((a, b) => {
+        if (sortBy === 'rank') return sortOrder === 'asc' ? a.rank - b.rank : b.rank - a.rank;
+        if (sortBy === 'title') {
+          const cmp = a.title.localeCompare(b.title);
+          return sortOrder === 'asc' ? cmp : -cmp;
+        }
+        if (sortBy === 'lastSeenAt') {
+          const cmp = a.lastSeenAt - b.lastSeenAt;
+          return sortOrder === 'asc' ? cmp : -cmp;
+        }
+        if (sortBy === 'size') {
+          const cmp = a.sizeOnDisk - b.sizeOnDisk;
+          return sortOrder === 'asc' ? cmp : -cmp;
+        }
+        return 0;
+      });
+  }, [activeQueue, searchQuery, sortBy, sortOrder]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredQueue.length / pageSize));
+  const validPage = Math.min(currentPage, totalPages);
+  const startIndex = (validPage - 1) * pageSize;
+  const paginatedQueue = useMemo(
+    () => filteredQueue.slice(startIndex, startIndex + pageSize),
+    [filteredQueue, pageSize, startIndex],
+  );
+
+  const intervalMs = (scheduler?.intervalMinutes || 5) * 60 * 1000;
+  const msUntilNextRun = scheduler?.nextRunAt ? Math.max(scheduler.nextRunAt - now, 0) : null;
+  const cycleProgress = scheduler?.running
+    ? 100
+    : msUntilNextRun == null
+      ? 0
+      : Math.min(100, Math.max(0, ((intervalMs - msUntilNextRun) / intervalMs) * 100));
+  const nextActionLabel = scheduler?.running
+    ? 'Deletion cycle running now'
+    : isExceeded && activeQueue.length > 0
+      ? 'Next automatic deletion'
+      : 'Next queue evaluation';
+
   if (loading) {
     return (
       <div className="flex justify-center items-center h-full">
@@ -217,40 +317,6 @@ export default function Dashboard() {
       </div>
     );
   }
-
-  const activeConfig = storageConfigs.find(s => s.id === activeTab) || storageConfigs[0];
-  const activeDisk = diskStatuses.find(d => d.storageId === activeConfig.id);
-  const activeQueue = queues[activeConfig.id] || [];
-
-  const targetFreeSpace = activeConfig?.targetFreeSpace || 100;
-  const isExceeded = (activeDisk?.freeBytes ?? 0) < targetFreeSpace;
-
-  // Annotate items with original rank before filtering/sorting
-  const rankedQueue = activeQueue.map((item, idx) => ({ ...item, rank: idx + 1 }));
-
-  const filteredQueue = rankedQueue
-    .filter(item => item.title.toLowerCase().includes(searchQuery.toLowerCase()))
-    .sort((a, b) => {
-      if (sortBy === 'rank') return sortOrder === 'asc' ? a.rank - b.rank : b.rank - a.rank;
-      if (sortBy === 'title') {
-        const cmp = a.title.localeCompare(b.title);
-        return sortOrder === 'asc' ? cmp : -cmp;
-      }
-      if (sortBy === 'lastSeenAt') {
-        const cmp = a.lastSeenAt - b.lastSeenAt;
-        return sortOrder === 'asc' ? cmp : -cmp;
-      }
-      if (sortBy === 'size') {
-        const cmp = a.sizeOnDisk - b.sizeOnDisk;
-        return sortOrder === 'asc' ? cmp : -cmp;
-      }
-      return 0;
-    });
-
-  const totalPages = Math.max(1, Math.ceil(filteredQueue.length / pageSize));
-  const validPage = Math.min(currentPage, totalPages);
-  const startIndex = (validPage - 1) * pageSize;
-  const paginatedQueue = filteredQueue.slice(startIndex, startIndex + pageSize);
 
   return (
     <div className="max-w-7xl mx-auto space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500 pb-12">
@@ -269,7 +335,6 @@ export default function Dashboard() {
         </button>
       </header>
 
-      {/* Storage tabs */}
       <div className="flex overflow-x-auto gap-2 border-b border-slate-800 pb-2 custom-scrollbar">
         {storageConfigs.map(storage => (
           <button
@@ -296,7 +361,6 @@ export default function Dashboard() {
         </div>
       )}
 
-      {/* Disk widget */}
       {activeDisk && (
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 animate-in fade-in">
           <div className="col-span-1 md:col-span-2 bg-slate-800/50 backdrop-blur-md rounded-2xl p-6 border border-slate-700/50 shadow-xl relative overflow-hidden group">
@@ -316,7 +380,7 @@ export default function Dashboard() {
               <div className="h-4 w-full bg-slate-900 rounded-full overflow-hidden">
                 <div
                   className={`h-full transition-all duration-1000 ${isExceeded ? 'bg-red-500 shadow-[0_0_15px_rgba(239,68,68,0.5)]' : 'bg-cyan-500 shadow-[0_0_15px_rgba(34,211,238,0.5)]'}`}
-                  style={{ width: `${Math.max(targetFreeSpace - activeDisk.freeBytes, 0)}%` }}
+                  style={{ width: `${Math.min(100, Math.max(targetFreeSpace - activeDisk.freeBytes, 0))}%` }}
                 />
               </div>
               <div className="mt-4 flex items-center justify-end gap-2 text-slate-300">
@@ -326,24 +390,53 @@ export default function Dashboard() {
             </div>
           </div>
 
-          <div className="bg-slate-800/50 backdrop-blur-md rounded-2xl p-6 border border-slate-700/50 shadow-xl flex flex-col justify-center items-center text-center">
-            <div className="w-16 h-16 rounded-full bg-cyan-500/10 flex items-center justify-center mb-4 shadow-[0_0_30px_rgba(34,211,238,0.2)]">
-              <span className="text-2xl font-bold text-cyan-400">{activeQueue.length}</span>
+          <div className="bg-slate-800/50 backdrop-blur-md rounded-2xl p-6 border border-slate-700/50 shadow-xl flex flex-col gap-4 justify-between">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="text-xs uppercase tracking-[0.2em] text-slate-500">{nextActionLabel}</p>
+                <h3 className="mt-2 text-2xl font-bold text-slate-100">{scheduler?.running ? 'Running…' : formatCountdown(msUntilNextRun)}</h3>
+                <p className="text-sm text-slate-400 mt-2">Every {scheduler?.intervalMinutes || 5} minute(s), Kirby checks whether this storage needs help.</p>
+              </div>
+              <div className="flex flex-col items-end gap-2">
+                {scheduler?.dryRun && (
+                  <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-amber-500/20 text-amber-300 text-xs font-semibold">
+                    <TestTube2 className="w-3.5 h-3.5" /> Dry run
+                  </span>
+                )}
+                <div className="w-14 h-14 rounded-full bg-cyan-500/10 flex items-center justify-center shadow-[0_0_30px_rgba(34,211,238,0.15)]">
+                  <Clock3 className="w-7 h-7 text-cyan-400" />
+                </div>
+              </div>
             </div>
-            <h3 className="font-semibold text-slate-200">Pending Deletions</h3>
-            <p className="text-sm text-slate-400 mt-2">Oldest medias queued for removal on this storage when limit is reached.</p>
+
+            <div>
+              <div className="h-2 w-full bg-slate-900 rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-linear-to-r from-cyan-500 to-blue-500 transition-all duration-1000"
+                  style={{ width: `${cycleProgress}%` }}
+                />
+              </div>
+              <div className="mt-3 flex items-center justify-between text-xs text-slate-400">
+                <span>Last run: {formatLastRun(scheduler?.lastRunCompletedAt || scheduler?.lastRunStartedAt || null)}</span>
+                <span className="text-slate-300 font-semibold">{activeQueue.length} queued</span>
+              </div>
+            </div>
           </div>
         </div>
       )}
 
-      {/* Queue */}
       {activeConfig && (
         <div className="bg-slate-800/50 backdrop-blur-md rounded-2xl p-6 border border-slate-700/50 shadow-xl flex flex-col gap-6">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-            <h3 className="text-xl font-semibold flex items-center gap-2">
-              Deletion Queue
-              <span className="text-xs font-normal px-2 py-1 bg-slate-900 rounded-md text-slate-400">Total: {filteredQueue.length}</span>
-            </h3>
+            <div>
+              <h3 className="text-xl font-semibold flex items-center gap-2">
+                Deletion Queue
+                <span className="text-xs font-normal px-2 py-1 bg-slate-900 rounded-md text-slate-400">Total: {filteredQueue.length}</span>
+              </h3>
+              {scheduler?.dryRun && (
+                <p className="text-xs text-amber-300 mt-2">Dry-run mode is enabled, delete actions are simulated and logged without touching Plex, Jellyfin, Radarr, Sonarr, or qBittorrent.</p>
+              )}
+            </div>
 
             <div className="flex flex-wrap items-center gap-3">
               <SortSelect
@@ -365,8 +458,8 @@ export default function Dashboard() {
           {filteredQueue.length === 0 ? (
             <div className="text-center py-12 text-slate-500">
               {activeQueue.length === 0
-                ? "No media items identified for this storage block. Ensure Jellyfin/Plex is configured properly and paths match."
-                : "No media items match your search."}
+                ? 'No media items identified for this storage block. Ensure Jellyfin/Plex is configured properly and paths match.'
+                : 'No media items match your search.'}
             </div>
           ) : (
             <>
@@ -417,7 +510,7 @@ export default function Dashboard() {
                             className="p-2 bg-orange-500/80 hover:bg-orange-500 text-white rounded-lg backdrop-blur-sm transition-colors shadow-lg">
                             <ShieldBan className="w-4 h-4" />
                           </button>
-                          <button onClick={() => deleteItem(item)} title="Delete item"
+                          <button onClick={() => deleteItem(item)} title={scheduler?.dryRun ? 'Simulate deletion' : 'Delete item'}
                             className={`p-2 bg-red-500/80 hover:bg-red-500 text-white rounded-lg backdrop-blur-sm transition-colors shadow-lg ${item.deleting ? 'cursor-not-allowed' : 'cursor-pointer'}`}>
                             {item.deleting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash className="w-4 h-4" />}
                           </button>

@@ -1,0 +1,4 @@
+services:
+  kirby:
+    environment:
+      - DRY_RUN=true

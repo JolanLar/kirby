@@ -151,6 +151,7 @@ export default function Settings() {
     radarrUrl: '', radarrApiKey: '',
     qbUrl: '', qbUser: '', qbPass: '',
     autoExcludeThreshold: '0',
+    deletionIntervalMinutes: '5',
     deletionDeltaDays: '0',
     excludeFavorites: 'false',
     excludeFavoritesAllUsers: 'true',
@@ -466,7 +467,7 @@ export default function Settings() {
             <Shield className="w-5 h-5 text-indigo-400" /> 
             Global Automation Rules
           </h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <InputGroup
               label="Auto-Exclude Deletion Threshold"
               name="autoExcludeThreshold"
@@ -475,6 +476,15 @@ export default function Settings() {
               onChange={handleChange}
               placeholder="e.g. 3 (0 to disable)"
               tooltip="Automatically add media to the exclusion list after it has been deleted this many times. Prevents the same item from being repeatedly re-downloaded and deleted. Set to 0 to disable."
+            />
+            <InputGroup
+              label="Deletion Interval (minutes)"
+              name="deletionIntervalMinutes"
+              type="number"
+              value={settings.deletionIntervalMinutes || '5'}
+              onChange={handleChange}
+              placeholder="e.g. 5"
+              tooltip="How often Kirby re-checks storage pressure and deletes the next eligible item when a target is still exceeded. Minimum: 1 minute."
             />
             <InputGroup
               label="Deletion Delta Days"
@@ -486,7 +496,7 @@ export default function Settings() {
               tooltip="Add this many days to a media's next eligible deletion date for each time it has previously been deleted. Gives recently-deleted items a grace period before being eligible again. Set to 0 to disable."
             />
           </div>
-          <p className="text-xs text-slate-400 mt-3">Auto-Exclude: automatically exclude media deleted this many times. Deletion Delta: days added per deletion event to postpone re-deletion. Set to 0 to disable each.</p>
+          <p className="text-xs text-slate-400 mt-3">Auto-Exclude: automatically exclude media deleted this many times. Deletion Interval: how often Kirby attempts the next automatic cleanup pass. Deletion Delta: days added per deletion event to postpone re-deletion. Set threshold or delta to 0 to disable them.</p>
 
           {/* Favorite Exclusion */}
           <div className="mt-6 pt-6 border-t border-slate-700/50 space-y-4">

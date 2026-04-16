@@ -13,3 +13,8 @@ body {
   color: var(--foreground);
   font-family: 'Inter', system-ui, sans-serif;
 }
+
+.media-card-shell {
+  content-visibility: auto;
+  contain-intrinsic-size: 320px 480px;
+}

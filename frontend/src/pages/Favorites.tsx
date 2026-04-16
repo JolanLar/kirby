@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useMemo } from 'react';
 import axios from 'axios';
 import { Heart, EyeOff, Flame } from 'lucide-react';
 import SearchInput from '../components/SearchInput';
@@ -28,7 +28,7 @@ export default function Favorites() {
   const [favorites, setFavorites] = useState<FavoriteItem[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
-  const [pageSize, setPageSize] = useState(48);
+  const [pageSize, setPageSize] = useState(24);
   const [toggling, setToggling] = useState<Set<string>>(new Set());
   const [sortBy, setSortBy] = useState('seen');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
@@ -68,7 +68,7 @@ export default function Favorites() {
     }
   }
 
-  const filtered = favorites
+  const filtered = useMemo(() => favorites
     .filter(item => item.title.toLowerCase().includes(searchQuery.toLowerCase()))
     .sort((a, b) => {
       let cmp = 0;
@@ -76,12 +76,12 @@ export default function Favorites() {
       else if (sortBy === 'fav') cmp = a.favoritedBy.length - b.favoritedBy.length;
       else cmp = a.lastSeenAt - b.lastSeenAt;
       return sortOrder === 'asc' ? cmp : -cmp;
-    });
+    }), [favorites, searchQuery, sortBy, sortOrder]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
   const validPage = Math.min(currentPage, totalPages);
   const startIndex = (validPage - 1) * pageSize;
-  const paginated = filtered.slice(startIndex, startIndex + pageSize);
+  const paginated = useMemo(() => filtered.slice(startIndex, startIndex + pageSize), [filtered, pageSize, startIndex]);
 
   return (
     <div className="max-w-7xl mx-auto space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500 pb-12">

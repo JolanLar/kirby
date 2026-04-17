@@ -102,7 +102,7 @@ function MediaCard({
         )}
 
         {hoverOverlay && (
-          <div className="media-card-hover-overlay absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-black/40 backdrop-blur-sm">
+          <div className="media-card-hover-overlay absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-black/40">
             {hoverOverlay}
           </div>
         )}

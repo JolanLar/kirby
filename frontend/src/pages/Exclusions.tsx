@@ -157,7 +157,7 @@ export default function Exclusions() {
                     <button
                       onClick={() => removeExclusion(item.tmdbId, item.type)}
                       title="Remove Exclusion"
-                      className="px-4 py-2 bg-emerald-500/80 hover:bg-emerald-500 text-white rounded-lg backdrop-blur-sm transition-colors shadow-lg flex items-center gap-2 font-medium"
+                      className="px-4 py-2 bg-emerald-500 hover:bg-emerald-400 text-white rounded-lg transition-colors shadow-lg flex items-center gap-2 font-medium"
                     >
                       <ShieldCheck className="w-4 h-4" />
                       Restore

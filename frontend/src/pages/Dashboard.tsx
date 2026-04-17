@@ -164,45 +164,45 @@ const QueueMediaCard = memo(function QueueMediaCard({
       containerClass="border-slate-800 hover:border-cyan-500/30 hover:shadow-[0_0_20px_rgba(34,211,238,0.15)]"
       imageClass={`group-hover:scale-105 ${item.deleting ? 'opacity-30' : ''}`}
       topLeft={
-        <span className="px-2 py-1 bg-black/60 backdrop-blur-md rounded text-xs font-mono font-bold text-cyan-400">
+        <span className="px-2 py-1 bg-slate-950 rounded text-xs font-mono font-bold text-cyan-400">
           #{item.rank}
         </span>
       }
       topRight={
-        <div className="opacity-0 group-hover:opacity-100 transition-opacity flex flex-col gap-1 items-end">
+        <div className="media-card-actions opacity-0 group-hover:opacity-100 transition-opacity flex flex-col gap-1 items-end">
           <div className="flex gap-1">
             {item.plexId && serviceUrls.plexMachineId && serviceUrls.plexPublicUrl && (
               <a href={`${serviceUrls.plexPublicUrl}/web/index.html#!/server/${serviceUrls.plexMachineId}/details?key=%2Flibrary%2Fmetadata%2F${item.plexId}`}
                 target="_blank" rel="noopener noreferrer" title="Open in Plex"
-                className="px-2 py-1 bg-orange-500/80 hover:bg-orange-500 text-white rounded text-[10px] font-bold backdrop-blur-sm transition-colors"
+                className="px-2 py-1 bg-orange-500 hover:bg-orange-400 text-white rounded text-[10px] font-bold transition-colors"
                 onClick={e => e.stopPropagation()}>Plex</a>
             )}
             {item.jellyfinId && serviceUrls.jellyfinPublicUrl && (
               <a href={`${serviceUrls.jellyfinPublicUrl}/web/index.html#!/details?id=${item.jellyfinId}`}
                 target="_blank" rel="noopener noreferrer" title="Open in Jellyfin"
-                className="px-2 py-1 bg-blue-500/80 hover:bg-blue-500 text-white rounded text-[10px] font-bold backdrop-blur-sm transition-colors"
+                className="px-2 py-1 bg-blue-500 hover:bg-blue-400 text-white rounded text-[10px] font-bold transition-colors"
                 onClick={e => e.stopPropagation()}>Jelly</a>
             )}
             {item.type === 'movie' && item.radarrId && serviceUrls.radarrUrl && (
               <a href={`${serviceUrls.radarrUrl}/movie/${item.radarrId}`}
                 target="_blank" rel="noopener noreferrer" title="Open in Radarr"
-                className="px-2 py-1 bg-yellow-600/80 hover:bg-yellow-600 text-white rounded text-[10px] font-bold backdrop-blur-sm transition-colors"
+                className="px-2 py-1 bg-yellow-600 hover:bg-yellow-500 text-white rounded text-[10px] font-bold transition-colors"
                 onClick={e => e.stopPropagation()}>Radarr</a>
             )}
             {item.type === 'show' && item.sonarrId && serviceUrls.sonarrUrl && (
               <a href={`${serviceUrls.sonarrUrl}/series/${item.sonarrId}`}
                 target="_blank" rel="noopener noreferrer" title="Open in Sonarr"
-                className="px-2 py-1 bg-teal-600/80 hover:bg-teal-600 text-white rounded text-[10px] font-bold backdrop-blur-sm transition-colors"
+                className="px-2 py-1 bg-teal-600 hover:bg-teal-500 text-white rounded text-[10px] font-bold transition-colors"
                 onClick={e => e.stopPropagation()}>Sonarr</a>
             )}
           </div>
           <div className="flex gap-1.5">
             <button onClick={() => onExclude(item)} title="Exclude from deletion"
-              className="p-2 bg-orange-500/80 hover:bg-orange-500 text-white rounded-lg backdrop-blur-sm transition-colors shadow-lg">
+              className="p-2 bg-orange-500 hover:bg-orange-400 text-white rounded-lg transition-colors shadow-lg">
               <ShieldBan className="w-4 h-4" />
             </button>
             <button onClick={() => onDelete(item)} title={dryRun ? 'Simulate deletion' : 'Delete item'}
-              className={`p-2 bg-red-500/80 hover:bg-red-500 text-white rounded-lg backdrop-blur-sm transition-colors shadow-lg ${item.deleting ? 'cursor-not-allowed' : 'cursor-pointer'}`}>
+              className={`p-2 bg-red-500 hover:bg-red-400 text-white rounded-lg transition-colors shadow-lg ${item.deleting ? 'cursor-not-allowed' : 'cursor-pointer'}`}>
               {item.deleting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash className="w-4 h-4" />}
             </button>
           </div>

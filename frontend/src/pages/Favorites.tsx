@@ -146,14 +146,14 @@ export default function Favorites() {
                     topLeft={
                       (item.sources?.includes('plex') || item.sources?.includes('jellyfin')) ? (
                         <>
-                          {item.sources.includes('plex') && <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-orange-500/80 text-white backdrop-blur-sm">P</span>}
-                          {item.sources.includes('jellyfin') && <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-blue-500/80 text-white backdrop-blur-sm">J</span>}
+                          {item.sources.includes('plex') && <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-orange-500 text-white">P</span>}
+                          {item.sources.includes('jellyfin') && <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-blue-500 text-white">J</span>}
                         </>
                       ) : undefined
                     }
                     topRight={
                       isIgnored ? (
-                        <div className="px-2 py-1 bg-orange-500/80 backdrop-blur-sm rounded text-[10px] font-bold text-white flex items-center gap-1">
+                        <div className="px-2 py-1 bg-orange-500 rounded text-[10px] font-bold text-white flex items-center gap-1">
                           <EyeOff className="w-3 h-3" /> Ignored
                         </div>
                       ) : undefined
@@ -163,10 +163,10 @@ export default function Favorites() {
                         onClick={() => toggleIgnore(item)}
                         disabled={isToggling}
                         title={isIgnored ? "Re-activate favorite protection" : "Ignore favorite (re-enter deletion queue)"}
-                        className={`px-4 py-2 rounded-lg backdrop-blur-sm transition-colors shadow-lg flex items-center gap-2 font-medium text-sm disabled:opacity-50 ${
+                        className={`px-4 py-2 rounded-lg transition-colors shadow-lg flex items-center gap-2 font-medium text-sm disabled:opacity-50 ${
                           isIgnored
-                            ? 'bg-pink-500/80 hover:bg-pink-500 text-white'
-                            : 'bg-orange-500/80 hover:bg-orange-500 text-white'
+                            ? 'bg-pink-500 hover:bg-pink-400 text-white'
+                            : 'bg-orange-500 hover:bg-orange-400 text-white'
                         }`}
                       >
                         {isIgnored ? <Flame className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}

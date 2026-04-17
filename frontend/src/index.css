@@ -35,11 +35,6 @@ body {
 @media (hover: none), (pointer: coarse) {
   .media-card-shell {
     box-shadow: none;
-    contain: layout style !important;
-  }
-
-  .media-card-poster-frame {
-    contain: layout style !important;
   }
 
   .media-card-shell .group-hover\:translate-y-0 {
@@ -80,6 +75,9 @@ body {
 
   .media-card-mobile-menu-panel {
     min-width: 10rem !important;
+    max-width: calc(100vw - 1.5rem) !important;
+    max-height: calc(100vh - 1.5rem) !important;
+    overflow-y: auto !important;
   }
 
   .media-card-actions {

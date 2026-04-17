@@ -1,4 +1,5 @@
-import { memo, useEffect, useRef, useState, type ReactNode } from 'react';
+import { memo, useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 import { EllipsisVertical, Loader2 } from 'lucide-react';
 
 export interface MediaCardMobileAction {
@@ -36,11 +37,13 @@ function MediaCard({
   info,
 }: MediaCardProps) {
   const shellRef = useRef<HTMLDivElement | null>(null);
-  const mobileMenuRef = useRef<HTMLDivElement | null>(null);
+  const mobileMenuTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const mobileMenuPanelRef = useRef<HTMLDivElement | null>(null);
   const [shouldRenderImage, setShouldRenderImage] = useState(() => !posterUrl);
   const [imageLoaded, setImageLoaded] = useState(false);
   const [imageFailed, setImageFailed] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [mobileMenuStyle, setMobileMenuStyle] = useState<CSSProperties>({});
 
   useEffect(() => {
     setShouldRenderImage(!posterUrl);
@@ -52,14 +55,37 @@ function MediaCard({
   useEffect(() => {
     if (!mobileMenuOpen) return;
 
-    const handlePointerDown = (event: PointerEvent) => {
-      if (!mobileMenuRef.current?.contains(event.target as Node)) {
-        setMobileMenuOpen(false);
+    const updateMobileMenuPosition = () => {
+      const triggerRect = mobileMenuTriggerRef.current?.getBoundingClientRect();
+      const panelRect = mobileMenuPanelRef.current?.getBoundingClientRect();
+
+      if (!triggerRect || !panelRect) return;
+
+      const viewportWidth = window.innerWidth;
+      const viewportHeight = window.innerHeight;
+      const margin = 12;
+      const gap = 8;
+
+      let left = triggerRect.right - panelRect.width;
+      left = Math.max(margin, Math.min(left, viewportWidth - panelRect.width - margin));
+
+      let top = triggerRect.bottom + gap;
+      if (top + panelRect.height > viewportHeight - margin) {
+        top = Math.max(margin, triggerRect.top - panelRect.height - gap);
       }
+
+      setMobileMenuStyle({ left: `${left}px`, top: `${top}px` });
     };
 
-    document.addEventListener('pointerdown', handlePointerDown);
-    return () => document.removeEventListener('pointerdown', handlePointerDown);
+    const frame = window.requestAnimationFrame(updateMobileMenuPosition);
+    window.addEventListener('resize', updateMobileMenuPosition);
+    window.addEventListener('scroll', updateMobileMenuPosition, true);
+
+    return () => {
+      window.cancelAnimationFrame(frame);
+      window.removeEventListener('resize', updateMobileMenuPosition);
+      window.removeEventListener('scroll', updateMobileMenuPosition, true);
+    };
   }, [mobileMenuOpen]);
 
   useEffect(() => {
@@ -86,8 +112,8 @@ function MediaCard({
   }, [posterUrl, shouldRenderImage]);
 
   return (
-    <div ref={shellRef} className={`media-card-shell group relative bg-slate-900 rounded-xl overflow-hidden sm:overflow-hidden overflow-visible transition-all duration-200 hover:-translate-y-0.5 border transform-gpu ${containerClass}`}>
-      <div className="media-card-poster-frame aspect-2/3 w-full relative overflow-hidden sm:overflow-hidden overflow-visible bg-slate-800">
+    <div ref={shellRef} className={`media-card-shell group relative bg-slate-900 rounded-xl overflow-hidden transition-all duration-200 hover:-translate-y-0.5 border transform-gpu ${containerClass}`}>
+      <div className="media-card-poster-frame aspect-2/3 w-full relative overflow-hidden bg-slate-800">
         {posterUrl && shouldRenderImage && !imageFailed ? (
           <img
             src={posterUrl}
@@ -129,8 +155,9 @@ function MediaCard({
         )}
 
         {mobileActions && mobileActions.length > 0 && (
-          <div ref={mobileMenuRef} className="media-card-mobile-menu absolute top-2 right-2 z-30 flex flex-col items-end">
+          <div className="media-card-mobile-menu absolute top-2 right-2 z-30 flex flex-col items-end">
             <button
+              ref={mobileMenuTriggerRef}
               type="button"
               onClick={(event) => {
                 event.stopPropagation();
@@ -143,8 +170,19 @@ function MediaCard({
               <EllipsisVertical className="w-4 h-4" />
             </button>
 
-            {mobileMenuOpen && (
-              <div className="media-card-mobile-menu-panel absolute top-full right-0 mt-2 min-w-36 overflow-hidden rounded-xl border border-slate-700/80 bg-slate-950/95 shadow-2xl backdrop-blur-sm">
+            {mobileMenuOpen && typeof document !== 'undefined' && createPortal(
+              <>
+                <button
+                  type="button"
+                  aria-label="Close actions"
+                  className="fixed inset-0 z-40 bg-transparent"
+                  onClick={() => setMobileMenuOpen(false)}
+                />
+                <div
+                  ref={mobileMenuPanelRef}
+                  style={mobileMenuStyle}
+                  className="media-card-mobile-menu-panel fixed z-50 min-w-36 overflow-hidden rounded-xl border border-slate-700/80 bg-slate-950/95 shadow-2xl backdrop-blur-sm"
+                >
                 {mobileActions.map((action) =>
                   action.href ? (
                     <a
@@ -177,7 +215,9 @@ function MediaCard({
                     </button>
                   ),
                 )}
-              </div>
+                </div>
+              </>,
+              document.body,
             )}
           </div>
         )}

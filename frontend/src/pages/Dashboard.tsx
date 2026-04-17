@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
+import { memo, useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import axios from 'axios';
 import { HardDrive, AlertTriangle, ShieldBan, RefreshCw, Trash, Loader2, Clock3, TestTube2 } from 'lucide-react';
 import SearchInput from '../components/SearchInput';
@@ -74,6 +74,157 @@ function formatLastRun(timestamp: number | null) {
   });
 }
 
+const SchedulerCard = memo(function SchedulerCard({
+  scheduler,
+  isExceeded,
+  queueLength,
+}: {
+  scheduler: SchedulerStatus | null;
+  isExceeded: boolean;
+  queueLength: number;
+}) {
+  const [now, setNow] = useState(() => Date.now());
+
+  useEffect(() => {
+    const interval = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const intervalMs = (scheduler?.intervalMinutes || 5) * 60 * 1000;
+  const msUntilNextRun = scheduler?.nextRunAt ? Math.max(scheduler.nextRunAt - now, 0) : null;
+  const cycleProgress = scheduler?.running
+    ? 100
+    : msUntilNextRun == null
+      ? 0
+      : Math.min(100, Math.max(0, ((intervalMs - msUntilNextRun) / intervalMs) * 100));
+  const nextActionLabel = scheduler?.running
+    ? 'Deletion cycle running now'
+    : isExceeded && queueLength > 0
+      ? 'Next automatic deletion'
+      : 'Next queue evaluation';
+
+  return (
+    <div className="bg-slate-800/50 backdrop-blur-md rounded-2xl p-6 border border-slate-700/50 shadow-xl flex flex-col gap-4 justify-between">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="text-xs uppercase tracking-[0.2em] text-slate-500">{nextActionLabel}</p>
+          <h3 className="mt-2 text-2xl font-bold text-slate-100">{scheduler?.running ? 'Running…' : formatCountdown(msUntilNextRun)}</h3>
+          <p className="text-sm text-slate-400 mt-2">Every {scheduler?.intervalMinutes || 5} minute(s), Kirby checks whether this storage needs help.</p>
+        </div>
+        <div className="flex flex-col items-end gap-2">
+          {scheduler?.dryRun && (
+            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-amber-500/20 text-amber-300 text-xs font-semibold">
+              <TestTube2 className="w-3.5 h-3.5" /> Dry run
+            </span>
+          )}
+          <div className="w-14 h-14 rounded-full bg-cyan-500/10 flex items-center justify-center shadow-[0_0_30px_rgba(34,211,238,0.15)]">
+            <Clock3 className="w-7 h-7 text-cyan-400" />
+          </div>
+        </div>
+      </div>
+
+      <div>
+        <div className="h-2 w-full bg-slate-900 rounded-full overflow-hidden">
+          <div
+            className="h-full bg-linear-to-r from-cyan-500 to-blue-500 transition-all duration-1000"
+            style={{ width: `${cycleProgress}%` }}
+          />
+        </div>
+        <div className="mt-3 flex items-center justify-between text-xs text-slate-400">
+          <span>Last run: {formatLastRun(scheduler?.lastRunCompletedAt || scheduler?.lastRunStartedAt || null)}</span>
+          <span className="text-slate-300 font-semibold">{queueLength} queued</span>
+        </div>
+      </div>
+    </div>
+  );
+});
+
+type RankedMediaItem = MediaItem & { rank: number };
+
+const QueueMediaCard = memo(function QueueMediaCard({
+  item,
+  serviceUrls,
+  dryRun,
+  onExclude,
+  onDelete,
+}: {
+  item: RankedMediaItem;
+  serviceUrls: { plexPublicUrl: string; plexMachineId: string; jellyfinPublicUrl: string; radarrUrl: string; sonarrUrl: string };
+  dryRun: boolean;
+  onExclude: (item: MediaItem) => void;
+  onDelete: (item: MediaItem) => void;
+}) {
+  return (
+    <MediaCard
+      posterUrl={item.posterUrl}
+      title={item.title}
+      loading={item.deleting}
+      containerClass="border-slate-800 hover:border-cyan-500/30 hover:shadow-[0_0_20px_rgba(34,211,238,0.15)]"
+      imageClass={`group-hover:scale-105 ${item.deleting ? 'opacity-30' : ''}`}
+      topLeft={
+        <span className="px-2 py-1 bg-black/60 backdrop-blur-md rounded text-xs font-mono font-bold text-cyan-400">
+          #{item.rank}
+        </span>
+      }
+      topRight={
+        <div className="opacity-0 group-hover:opacity-100 transition-opacity flex flex-col gap-1 items-end">
+          <div className="flex gap-1">
+            {item.plexId && serviceUrls.plexMachineId && serviceUrls.plexPublicUrl && (
+              <a href={`${serviceUrls.plexPublicUrl}/web/index.html#!/server/${serviceUrls.plexMachineId}/details?key=%2Flibrary%2Fmetadata%2F${item.plexId}`}
+                target="_blank" rel="noopener noreferrer" title="Open in Plex"
+                className="px-2 py-1 bg-orange-500/80 hover:bg-orange-500 text-white rounded text-[10px] font-bold backdrop-blur-sm transition-colors"
+                onClick={e => e.stopPropagation()}>Plex</a>
+            )}
+            {item.jellyfinId && serviceUrls.jellyfinPublicUrl && (
+              <a href={`${serviceUrls.jellyfinPublicUrl}/web/index.html#!/details?id=${item.jellyfinId}`}
+                target="_blank" rel="noopener noreferrer" title="Open in Jellyfin"
+                className="px-2 py-1 bg-blue-500/80 hover:bg-blue-500 text-white rounded text-[10px] font-bold backdrop-blur-sm transition-colors"
+                onClick={e => e.stopPropagation()}>Jelly</a>
+            )}
+            {item.type === 'movie' && item.radarrId && serviceUrls.radarrUrl && (
+              <a href={`${serviceUrls.radarrUrl}/movie/${item.radarrId}`}
+                target="_blank" rel="noopener noreferrer" title="Open in Radarr"
+                className="px-2 py-1 bg-yellow-600/80 hover:bg-yellow-600 text-white rounded text-[10px] font-bold backdrop-blur-sm transition-colors"
+                onClick={e => e.stopPropagation()}>Radarr</a>
+            )}
+            {item.type === 'show' && item.sonarrId && serviceUrls.sonarrUrl && (
+              <a href={`${serviceUrls.sonarrUrl}/series/${item.sonarrId}`}
+                target="_blank" rel="noopener noreferrer" title="Open in Sonarr"
+                className="px-2 py-1 bg-teal-600/80 hover:bg-teal-600 text-white rounded text-[10px] font-bold backdrop-blur-sm transition-colors"
+                onClick={e => e.stopPropagation()}>Sonarr</a>
+            )}
+          </div>
+          <div className="flex gap-1.5">
+            <button onClick={() => onExclude(item)} title="Exclude from deletion"
+              className="p-2 bg-orange-500/80 hover:bg-orange-500 text-white rounded-lg backdrop-blur-sm transition-colors shadow-lg">
+              <ShieldBan className="w-4 h-4" />
+            </button>
+            <button onClick={() => onDelete(item)} title={dryRun ? 'Simulate deletion' : 'Delete item'}
+              className={`p-2 bg-red-500/80 hover:bg-red-500 text-white rounded-lg backdrop-blur-sm transition-colors shadow-lg ${item.deleting ? 'cursor-not-allowed' : 'cursor-pointer'}`}>
+              {item.deleting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash className="w-4 h-4" />}
+            </button>
+          </div>
+        </div>
+      }
+      info={
+        <div className="translate-y-2 group-hover:translate-y-0 transition-transform">
+          <h4 className="font-bold text-sm text-balance line-clamp-2 leading-tight drop-shadow-md">{item.title}</h4>
+          <p className="text-xs text-slate-400 font-mono mt-1">Seen: {new Date(item.lastSeenAt).toLocaleDateString()}</p>
+          {item.deletionCount != null && item.deletionCount > 0 && item.deltaDays != null && item.deltaDays > 0 && (
+            <p className="text-xs text-amber-400 font-mono mt-0.5">+{item.deletionCount * item.deltaDays}d postponed</p>
+          )}
+          <div className="flex items-center gap-1 mt-1.5 flex-wrap">
+            <span className={`text-[10px] uppercase font-bold px-1.5 py-0.5 rounded bg-slate-700/80 ${item.type === 'movie' ? 'text-blue-300' : 'text-purple-300'}`}>{item.type}</span>
+            <span className={`text-[10px] uppercase font-bold px-1.5 py-0.5 rounded bg-slate-700/80 ${item.sizeOnDisk !== 0 ? 'text-green-300' : 'text-red-300'}`}>{(item.sizeOnDisk / 1e9).toFixed(2)} GB</span>
+            {item.plexId && <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-orange-600/70 text-white">P</span>}
+            {item.jellyfinId && <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-blue-600/70 text-white">J</span>}
+          </div>
+        </div>
+      }
+    />
+  );
+});
+
 export default function Dashboard() {
   const [diskStatuses, setDiskStatuses] = useState<DiskStatus[]>([]);
   const [queues, setQueues] = useState<Record<string, MediaItem[]>>({});
@@ -86,7 +237,6 @@ export default function Dashboard() {
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
   const [serviceUrls, setServiceUrls] = useState({ plexPublicUrl: '', plexMachineId: '', jellyfinPublicUrl: '', radarrUrl: '', sonarrUrl: '' });
   const [scheduler, setScheduler] = useState<SchedulerStatus | null>(null);
-  const [now, setNow] = useState(() => Date.now());
 
   const disableAutoRefresh = useRef(false);
   const pendingOperations = useRef(0);
@@ -156,11 +306,6 @@ export default function Dashboard() {
     const interval = setInterval(() => { if (!disableAutoRefresh.current) fetchData(); }, 10000);
     return () => { clearInterval(interval); };
   }, [fetchData]);
-
-  useEffect(() => {
-    const interval = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(interval);
-  }, []);
 
   function removeItemFromQueues(item: MediaItem) {
     setQueues(prev => {
@@ -288,19 +433,6 @@ export default function Dashboard() {
     [filteredQueue, pageSize, startIndex],
   );
 
-  const intervalMs = (scheduler?.intervalMinutes || 5) * 60 * 1000;
-  const msUntilNextRun = scheduler?.nextRunAt ? Math.max(scheduler.nextRunAt - now, 0) : null;
-  const cycleProgress = scheduler?.running
-    ? 100
-    : msUntilNextRun == null
-      ? 0
-      : Math.min(100, Math.max(0, ((intervalMs - msUntilNextRun) / intervalMs) * 100));
-  const nextActionLabel = scheduler?.running
-    ? 'Deletion cycle running now'
-    : isExceeded && activeQueue.length > 0
-      ? 'Next automatic deletion'
-      : 'Next queue evaluation';
-
   if (loading) {
     return (
       <div className="flex justify-center items-center h-full">
@@ -390,38 +522,7 @@ export default function Dashboard() {
             </div>
           </div>
 
-          <div className="bg-slate-800/50 backdrop-blur-md rounded-2xl p-6 border border-slate-700/50 shadow-xl flex flex-col gap-4 justify-between">
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <p className="text-xs uppercase tracking-[0.2em] text-slate-500">{nextActionLabel}</p>
-                <h3 className="mt-2 text-2xl font-bold text-slate-100">{scheduler?.running ? 'Running…' : formatCountdown(msUntilNextRun)}</h3>
-                <p className="text-sm text-slate-400 mt-2">Every {scheduler?.intervalMinutes || 5} minute(s), Kirby checks whether this storage needs help.</p>
-              </div>
-              <div className="flex flex-col items-end gap-2">
-                {scheduler?.dryRun && (
-                  <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-amber-500/20 text-amber-300 text-xs font-semibold">
-                    <TestTube2 className="w-3.5 h-3.5" /> Dry run
-                  </span>
-                )}
-                <div className="w-14 h-14 rounded-full bg-cyan-500/10 flex items-center justify-center shadow-[0_0_30px_rgba(34,211,238,0.15)]">
-                  <Clock3 className="w-7 h-7 text-cyan-400" />
-                </div>
-              </div>
-            </div>
-
-            <div>
-              <div className="h-2 w-full bg-slate-900 rounded-full overflow-hidden">
-                <div
-                  className="h-full bg-linear-to-r from-cyan-500 to-blue-500 transition-all duration-1000"
-                  style={{ width: `${cycleProgress}%` }}
-                />
-              </div>
-              <div className="mt-3 flex items-center justify-between text-xs text-slate-400">
-                <span>Last run: {formatLastRun(scheduler?.lastRunCompletedAt || scheduler?.lastRunStartedAt || null)}</span>
-                <span className="text-slate-300 font-semibold">{activeQueue.length} queued</span>
-              </div>
-            </div>
-          </div>
+          <SchedulerCard scheduler={scheduler} isExceeded={isExceeded} queueLength={activeQueue.length} />
         </div>
       )}
 
@@ -465,73 +566,13 @@ export default function Dashboard() {
             <>
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
                 {paginatedQueue.map((item) => (
-                  <MediaCard
+                  <QueueMediaCard
                     key={item.type + '-' + item.tmdbId}
-                    posterUrl={item.posterUrl}
-                    title={item.title}
-                    loading={item.deleting}
-                    containerClass="border-slate-800 hover:border-cyan-500/30 hover:shadow-[0_0_20px_rgba(34,211,238,0.15)]"
-                    imageClass={`group-hover:scale-105 ${item.deleting ? 'opacity-30' : ''}`}
-                    topLeft={
-                      <span className="px-2 py-1 bg-black/60 backdrop-blur-md rounded text-xs font-mono font-bold text-cyan-400">
-                        #{item.rank}
-                      </span>
-                    }
-                    topRight={
-                      <div className="opacity-0 group-hover:opacity-100 transition-opacity flex flex-col gap-1 items-end">
-                        <div className="flex gap-1">
-                          {item.plexId && serviceUrls.plexMachineId && serviceUrls.plexPublicUrl && (
-                            <a href={`${serviceUrls.plexPublicUrl}/web/index.html#!/server/${serviceUrls.plexMachineId}/details?key=%2Flibrary%2Fmetadata%2F${item.plexId}`}
-                              target="_blank" rel="noopener noreferrer" title="Open in Plex"
-                              className="px-2 py-1 bg-orange-500/80 hover:bg-orange-500 text-white rounded text-[10px] font-bold backdrop-blur-sm transition-colors"
-                              onClick={e => e.stopPropagation()}>Plex</a>
-                          )}
-                          {item.jellyfinId && serviceUrls.jellyfinPublicUrl && (
-                            <a href={`${serviceUrls.jellyfinPublicUrl}/web/index.html#!/details?id=${item.jellyfinId}`}
-                              target="_blank" rel="noopener noreferrer" title="Open in Jellyfin"
-                              className="px-2 py-1 bg-blue-500/80 hover:bg-blue-500 text-white rounded text-[10px] font-bold backdrop-blur-sm transition-colors"
-                              onClick={e => e.stopPropagation()}>Jelly</a>
-                          )}
-                          {item.type === 'movie' && item.radarrId && serviceUrls.radarrUrl && (
-                            <a href={`${serviceUrls.radarrUrl}/movie/${item.radarrId}`}
-                              target="_blank" rel="noopener noreferrer" title="Open in Radarr"
-                              className="px-2 py-1 bg-yellow-600/80 hover:bg-yellow-600 text-white rounded text-[10px] font-bold backdrop-blur-sm transition-colors"
-                              onClick={e => e.stopPropagation()}>Radarr</a>
-                          )}
-                          {item.type === 'show' && item.sonarrId && serviceUrls.sonarrUrl && (
-                            <a href={`${serviceUrls.sonarrUrl}/series/${item.sonarrId}`}
-                              target="_blank" rel="noopener noreferrer" title="Open in Sonarr"
-                              className="px-2 py-1 bg-teal-600/80 hover:bg-teal-600 text-white rounded text-[10px] font-bold backdrop-blur-sm transition-colors"
-                              onClick={e => e.stopPropagation()}>Sonarr</a>
-                          )}
-                        </div>
-                        <div className="flex gap-1.5">
-                          <button onClick={() => excludeItem(item)} title="Exclude from deletion"
-                            className="p-2 bg-orange-500/80 hover:bg-orange-500 text-white rounded-lg backdrop-blur-sm transition-colors shadow-lg">
-                            <ShieldBan className="w-4 h-4" />
-                          </button>
-                          <button onClick={() => deleteItem(item)} title={scheduler?.dryRun ? 'Simulate deletion' : 'Delete item'}
-                            className={`p-2 bg-red-500/80 hover:bg-red-500 text-white rounded-lg backdrop-blur-sm transition-colors shadow-lg ${item.deleting ? 'cursor-not-allowed' : 'cursor-pointer'}`}>
-                            {item.deleting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash className="w-4 h-4" />}
-                          </button>
-                        </div>
-                      </div>
-                    }
-                    info={
-                      <div className="translate-y-2 group-hover:translate-y-0 transition-transform">
-                        <h4 className="font-bold text-sm text-balance line-clamp-2 leading-tight drop-shadow-md">{item.title}</h4>
-                        <p className="text-xs text-slate-400 font-mono mt-1">Seen: {new Date(item.lastSeenAt).toLocaleDateString()}</p>
-                        {item.deletionCount != null && item.deletionCount > 0 && item.deltaDays != null && item.deltaDays > 0 && (
-                          <p className="text-xs text-amber-400 font-mono mt-0.5">+{item.deletionCount * item.deltaDays}d postponed</p>
-                        )}
-                        <div className="flex items-center gap-1 mt-1.5 flex-wrap">
-                          <span className={`text-[10px] uppercase font-bold px-1.5 py-0.5 rounded bg-slate-700/80 ${item.type === 'movie' ? 'text-blue-300' : 'text-purple-300'}`}>{item.type}</span>
-                          <span className={`text-[10px] uppercase font-bold px-1.5 py-0.5 rounded bg-slate-700/80 ${item.sizeOnDisk !== 0 ? 'text-green-300' : 'text-red-300'}`}>{(item.sizeOnDisk / 1e9).toFixed(2)} GB</span>
-                          {item.plexId && <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-orange-600/70 text-white">P</span>}
-                          {item.jellyfinId && <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-blue-600/70 text-white">J</span>}
-                        </div>
-                      </div>
-                    }
+                    item={item}
+                    serviceUrls={serviceUrls}
+                    dryRun={scheduler?.dryRun === true}
+                    onExclude={excludeItem}
+                    onDelete={deleteItem}
                   />
                 ))}
               </div>

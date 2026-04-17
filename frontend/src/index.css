@@ -35,6 +35,11 @@ body {
 @media (hover: none), (pointer: coarse) {
   .media-card-shell {
     box-shadow: none;
+    contain: layout style !important;
+  }
+
+  .media-card-poster-frame {
+    contain: layout style !important;
   }
 
   .media-card-shell .group-hover\:translate-y-0 {
@@ -64,6 +69,7 @@ body {
 
   .media-card-mobile-menu {
     display: block !important;
+    width: max-content !important;
   }
 
   .media-card-mobile-menu-trigger {

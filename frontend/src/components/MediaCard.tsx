@@ -86,8 +86,8 @@ function MediaCard({
   }, [posterUrl, shouldRenderImage]);
 
   return (
-    <div ref={shellRef} className={`media-card-shell group relative bg-slate-900 rounded-xl overflow-hidden transition-all duration-200 hover:-translate-y-0.5 border transform-gpu ${containerClass}`}>
-      <div className="media-card-poster-frame aspect-2/3 w-full relative overflow-hidden bg-slate-800">
+    <div ref={shellRef} className={`media-card-shell group relative bg-slate-900 rounded-xl overflow-hidden sm:overflow-hidden overflow-visible transition-all duration-200 hover:-translate-y-0.5 border transform-gpu ${containerClass}`}>
+      <div className="media-card-poster-frame aspect-2/3 w-full relative overflow-hidden sm:overflow-hidden overflow-visible bg-slate-800">
         {posterUrl && shouldRenderImage && !imageFailed ? (
           <img
             src={posterUrl}
@@ -129,7 +129,7 @@ function MediaCard({
         )}
 
         {mobileActions && mobileActions.length > 0 && (
-          <div ref={mobileMenuRef} className="media-card-mobile-menu absolute top-2 right-2 z-30">
+          <div ref={mobileMenuRef} className="media-card-mobile-menu absolute top-2 right-2 z-30 flex flex-col items-end">
             <button
               type="button"
               onClick={(event) => {
@@ -144,7 +144,7 @@ function MediaCard({
             </button>
 
             {mobileMenuOpen && (
-              <div className="media-card-mobile-menu-panel mt-2 min-w-36 overflow-hidden rounded-xl border border-slate-700/80 bg-slate-950/95 shadow-2xl backdrop-blur-sm">
+              <div className="media-card-mobile-menu-panel absolute top-full right-0 mt-2 min-w-36 overflow-hidden rounded-xl border border-slate-700/80 bg-slate-950/95 shadow-2xl backdrop-blur-sm">
                 {mobileActions.map((action) =>
                   action.href ? (
                     <a

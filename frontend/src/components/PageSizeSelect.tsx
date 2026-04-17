@@ -14,6 +14,7 @@ export default function PageSizeSelect({ value, onChange }: PageSizeSelectProps)
         onChange={(e) => onChange(Number(e.target.value))}
         className="bg-transparent text-sm text-slate-300 focus:outline-none cursor-pointer flex-1 min-w-0"
       >
+        <option value={12}>12 per page</option>
         <option value={24}>24 per page</option>
         <option value={48}>48 per page</option>
         <option value={96}>96 per page</option>

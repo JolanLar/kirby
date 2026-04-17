@@ -8,6 +8,13 @@ const PLEX_HEADERS = {
   'Accept': 'application/json'
 };
 
+function buildPlexPosterUrl(baseUrl: string, thumbPath: string | undefined, token: string, width = 342, height = 513) {
+  if (!thumbPath) return '';
+  const normalizedBase = baseUrl.replace(/\/$/, '');
+  const imageUrl = encodeURIComponent(thumbPath);
+  return `${normalizedBase}/photo/:/transcode?width=${width}&height=${height}&minSize=1&upscale=0&format=webp&url=${imageUrl}&X-Plex-Token=${token}`;
+}
+
 export async function getPlexMachineId(): Promise<string | null> {
   const url = getSetting('plexUrl');
   const token = getSetting('plexToken');
@@ -66,7 +73,7 @@ export async function getPlexItems(): Promise<MediaItem[]> {
           title: meta.title,
           type: section.type,
           lastSeenAt: meta.lastViewedAt > meta.addedAt ? meta.lastViewedAt * 1000 : meta.addedAt * 1000,
-          posterUrl: `${publicUrl || url}${meta.thumb}?X-Plex-Token=${token}`,
+          posterUrl: buildPlexPosterUrl(publicUrl || url, meta.thumb, token),
           sizeOnDisk: 0,
           plexPath: meta.Media?.[0]?.Part?.[0]?.file,
           source: 'plex',
@@ -272,7 +279,7 @@ export async function getPlexFavorites(includeUsers?: string[]): Promise<Favorit
                 tmdbId,
                 title: meta.title,
                 type: section.type === 'show' ? 'show' : 'movie',
-                posterUrl: `${publicUrl || url}${meta.thumb}?X-Plex-Token=${token}`,
+                posterUrl: buildPlexPosterUrl(publicUrl || url, meta.thumb, token),
                 favoritedBy: [userEntry.username],
               });
             }

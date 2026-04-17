@@ -23,12 +23,14 @@ const SORT_OPTIONS = [
   { value: 'title', label: 'Title' },
 ];
 
+const DEFAULT_PAGE_SIZE = typeof window !== 'undefined' && window.matchMedia('(max-width: 640px)').matches ? 12 : 24;
+
 export default function Exclusions() {
   const [exclusions, setExclusions] = useState<ExclusionItem[]>([]);
 
   const [searchQuery, setSearchQuery] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
-  const [pageSize, setPageSize] = useState(24);
+  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
 
   const [showAutoOnly, setShowAutoOnly] = useState(false);
   const [sortBy, setSortBy] = useState('createdAt');

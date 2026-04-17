@@ -2,6 +2,11 @@ import axios from 'axios';
 import { getSetting } from '../db';
 import { MediaItem } from '../models';
 
+function buildJellyfinPosterUrl(baseUrl: string, itemId: string, width = 342, quality = 70) {
+  const normalizedBase = baseUrl.replace(/\/$/, '');
+  return `${normalizedBase}/Items/${itemId}/Images/Primary?maxWidth=${width}&quality=${quality}`;
+}
+
 async function getAllUsersItems(client: any): Promise<MediaItem[]> {
   const publicUrl = getSetting('jellyfinPublicUrl');
   const url = getSetting('jellyfinUrl');
@@ -28,7 +33,7 @@ async function getAllUsersItems(client: any): Promise<MediaItem[]> {
       title: item.Name,
       type: type as 'movie' | 'show',
       lastSeenAt: new Date(item.DateCreated).getTime(),
-      posterUrl: `${publicUrl || url}/Items/${item.Id}/Images/Primary`,
+      posterUrl: buildJellyfinPosterUrl(publicUrl || url, item.Id),
       sizeOnDisk: 0,
       jellyfinPath: item.Path,
       source: 'jellyfin',
@@ -209,7 +214,7 @@ export async function getJellyfinFavorites(includeUsers?: string[]): Promise<Jel
               tmdbId,
               title: item.Name,
               type: item.Type === 'Series' ? 'show' : 'movie',
-              posterUrl: `${publicUrl || url}/Items/${item.Id}/Images/Primary`,
+              posterUrl: buildJellyfinPosterUrl(publicUrl || url, item.Id),
               favoritedBy: [user.Name],
             });
           }
@@ -225,4 +230,3 @@ export async function getJellyfinFavorites(includeUsers?: string[]): Promise<Jel
     return [];
   }
 }
-

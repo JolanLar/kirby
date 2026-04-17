@@ -52,6 +52,8 @@ const SORT_OPTIONS = [
   { value: 'size', label: 'Size' },
 ];
 
+const DEFAULT_PAGE_SIZE = typeof window !== 'undefined' && window.matchMedia('(max-width: 640px)').matches ? 12 : 24;
+
 function formatCountdown(ms: number | null) {
   if (ms == null) return 'Waiting…';
   if (ms <= 0) return 'Any moment now';
@@ -232,7 +234,7 @@ export default function Dashboard() {
   const [activeTab, setActiveTab] = useState<string>('');
   const [searchQuery, setSearchQuery] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
-  const [pageSize, setPageSize] = useState(24);
+  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
   const [sortBy, setSortBy] = useState('rank');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
   const [serviceUrls, setServiceUrls] = useState({ plexPublicUrl: '', plexMachineId: '', jellyfinPublicUrl: '', radarrUrl: '', sonarrUrl: '' });

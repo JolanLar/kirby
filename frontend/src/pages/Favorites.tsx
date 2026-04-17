@@ -24,11 +24,13 @@ const SORT_OPTIONS = [
   { value: 'fav', label: 'Most Favorited' },
 ];
 
+const DEFAULT_PAGE_SIZE = typeof window !== 'undefined' && window.matchMedia('(max-width: 640px)').matches ? 12 : 24;
+
 export default function Favorites() {
   const [favorites, setFavorites] = useState<FavoriteItem[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
-  const [pageSize, setPageSize] = useState(24);
+  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
   const [toggling, setToggling] = useState<Set<string>>(new Set());
   const [sortBy, setSortBy] = useState('seen');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');

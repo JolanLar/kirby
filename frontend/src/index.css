@@ -17,4 +17,46 @@ body {
 .media-card-shell {
   content-visibility: auto;
   contain-intrinsic-size: 320px 480px;
+  contain: layout paint style;
+}
+
+.media-card-poster-frame {
+  contain: layout paint;
+}
+
+.media-card-image {
+  backface-visibility: hidden;
+}
+
+@media (hover: none), (pointer: coarse) {
+  .media-card-shell {
+    box-shadow: none;
+  }
+
+  .media-card-shell:hover {
+    transform: none !important;
+  }
+
+  .media-card-image {
+    transform: none !important;
+    transition: opacity 150ms ease !important;
+    filter: none !important;
+    mix-blend-mode: normal !important;
+  }
+
+  .media-card-gradient {
+    background: linear-gradient(to top, rgba(0, 0, 0, 0.78), rgba(0, 0, 0, 0.18), transparent) !important;
+    opacity: 1 !important;
+  }
+
+  .media-card-hover-overlay {
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+    background: rgba(0, 0, 0, 0.18) !important;
+  }
+
+  .media-card-info {
+    transform: none !important;
+    transition: none !important;
+  }
 }

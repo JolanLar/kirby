@@ -163,6 +163,14 @@ export default function Exclusions() {
                       <span className="media-card-action-label">Restore</span>
                     </button>
                   }
+                  mobileActions={[
+                    {
+                      key: 'restore',
+                      label: 'Restore exclusion',
+                      onSelect: () => removeExclusion(item.tmdbId, item.type),
+                      toneClassName: 'text-emerald-300',
+                    },
+                  ]}
                   info={
                     <>
                       <h4 className="font-bold text-sm text-balance line-clamp-2 leading-tight drop-shadow-md text-red-50">{item.title}</h4>

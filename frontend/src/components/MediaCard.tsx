@@ -1,5 +1,14 @@
 import { memo, useEffect, useRef, useState, type ReactNode } from 'react';
-import { Loader2 } from 'lucide-react';
+import { EllipsisVertical, Loader2 } from 'lucide-react';
+
+export interface MediaCardMobileAction {
+  key: string;
+  label: string;
+  href?: string;
+  onSelect?: () => void;
+  disabled?: boolean;
+  toneClassName?: string;
+}
 
 interface MediaCardProps {
   posterUrl: string | null;
@@ -10,6 +19,7 @@ interface MediaCardProps {
   topLeft?: ReactNode;
   topRight?: ReactNode;
   hoverOverlay?: ReactNode;
+  mobileActions?: MediaCardMobileAction[];
   info: ReactNode;
 }
 
@@ -22,18 +32,35 @@ function MediaCard({
   topLeft,
   topRight,
   hoverOverlay,
+  mobileActions,
   info,
 }: MediaCardProps) {
   const shellRef = useRef<HTMLDivElement | null>(null);
+  const mobileMenuRef = useRef<HTMLDivElement | null>(null);
   const [shouldRenderImage, setShouldRenderImage] = useState(() => !posterUrl);
   const [imageLoaded, setImageLoaded] = useState(false);
   const [imageFailed, setImageFailed] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   useEffect(() => {
     setShouldRenderImage(!posterUrl);
     setImageLoaded(false);
     setImageFailed(false);
+    setMobileMenuOpen(false);
   }, [posterUrl]);
+
+  useEffect(() => {
+    if (!mobileMenuOpen) return;
+
+    const handlePointerDown = (event: PointerEvent) => {
+      if (!mobileMenuRef.current?.contains(event.target as Node)) {
+        setMobileMenuOpen(false);
+      }
+    };
+
+    document.addEventListener('pointerdown', handlePointerDown);
+    return () => document.removeEventListener('pointerdown', handlePointerDown);
+  }, [mobileMenuOpen]);
 
   useEffect(() => {
     if (!posterUrl || shouldRenderImage) return;
@@ -98,7 +125,61 @@ function MediaCard({
           <div className="absolute top-2 left-2 flex gap-1">{topLeft}</div>
         )}
         {topRight && (
-          <div className="absolute top-2 right-2 flex flex-col gap-1 items-end">{topRight}</div>
+          <div className="media-card-top-right absolute top-2 right-2 flex flex-col gap-1 items-end">{topRight}</div>
+        )}
+
+        {mobileActions && mobileActions.length > 0 && (
+          <div ref={mobileMenuRef} className="media-card-mobile-menu absolute top-2 right-2 z-30">
+            <button
+              type="button"
+              onClick={(event) => {
+                event.stopPropagation();
+                setMobileMenuOpen((open) => !open);
+              }}
+              className="media-card-mobile-menu-trigger flex items-center justify-center rounded-lg bg-slate-950/90 text-slate-100 shadow-lg"
+              aria-label="Open actions"
+              aria-expanded={mobileMenuOpen}
+            >
+              <EllipsisVertical className="w-4 h-4" />
+            </button>
+
+            {mobileMenuOpen && (
+              <div className="media-card-mobile-menu-panel mt-2 min-w-36 overflow-hidden rounded-xl border border-slate-700/80 bg-slate-950/95 shadow-2xl backdrop-blur-sm">
+                {mobileActions.map((action) =>
+                  action.href ? (
+                    <a
+                      key={action.key}
+                      href={action.href}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        setMobileMenuOpen(false);
+                      }}
+                      className={`block px-3 py-2.5 text-sm font-medium transition-colors hover:bg-slate-800 ${action.toneClassName || 'text-slate-100'}`}
+                    >
+                      {action.label}
+                    </a>
+                  ) : (
+                    <button
+                      key={action.key}
+                      type="button"
+                      disabled={action.disabled}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        if (action.disabled) return;
+                        action.onSelect?.();
+                        setMobileMenuOpen(false);
+                      }}
+                      className={`flex w-full items-center px-3 py-2.5 text-left text-sm font-medium transition-colors hover:bg-slate-800 disabled:opacity-50 ${action.toneClassName || 'text-slate-100'}`}
+                    >
+                      {action.label}
+                    </button>
+                  ),
+                )}
+              </div>
+            )}
+          </div>
         )}
 
         {hoverOverlay && (

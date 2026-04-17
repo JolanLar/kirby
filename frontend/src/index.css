@@ -28,6 +28,10 @@ body {
   backface-visibility: hidden;
 }
 
+.media-card-mobile-menu {
+  display: none;
+}
+
 @media (hover: none), (pointer: coarse) {
   .media-card-shell {
     box-shadow: none;
@@ -53,21 +57,28 @@ body {
     opacity: 1 !important;
   }
 
+  .media-card-top-right,
   .media-card-hover-overlay {
-    opacity: 1 !important;
-    align-items: flex-end !important;
-    justify-content: flex-end !important;
-    padding: 0.5rem !important;
-    background: linear-gradient(to top, rgba(0, 0, 0, 0.22), transparent 42%) !important;
+    display: none !important;
+  }
+
+  .media-card-mobile-menu {
+    display: block !important;
+  }
+
+  .media-card-mobile-menu-trigger {
+    width: 2rem !important;
+    height: 2rem !important;
+    border: 1px solid rgba(51, 65, 85, 0.9) !important;
+  }
+
+  .media-card-mobile-menu-panel {
+    min-width: 10rem !important;
   }
 
   .media-card-actions {
     opacity: 1 !important;
     gap: 0.375rem !important;
-  }
-
-  .media-card-service-links {
-    display: none !important;
   }
 
   .media-card-mobile-action {
@@ -90,10 +101,6 @@ body {
     height: 0.95rem !important;
     margin: 0 !important;
     flex-shrink: 0 !important;
-  }
-
-  .media-card-action-label {
-    display: none !important;
   }
 
   .media-card-info {

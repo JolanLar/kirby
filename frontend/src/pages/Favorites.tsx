@@ -173,6 +173,15 @@ export default function Favorites() {
                         <span className="media-card-action-label">{isIgnored ? 'Restore' : 'Ignore'}</span>
                       </button>
                     }
+                    mobileActions={[
+                      {
+                        key: 'ignore',
+                        label: isIgnored ? 'Restore favorite protection' : 'Ignore favorite',
+                        onSelect: () => toggleIgnore(item),
+                        disabled: isToggling,
+                        toneClassName: isIgnored ? 'text-pink-300' : 'text-orange-300',
+                      },
+                    ]}
                     info={
                       <>
                         <h4 className="font-bold text-sm text-balance line-clamp-2 leading-tight drop-shadow-md text-white">{item.title}</h4>

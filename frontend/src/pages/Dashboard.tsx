@@ -5,7 +5,7 @@ import SearchInput from '../components/SearchInput';
 import PageSizeSelect from '../components/PageSizeSelect';
 import SortSelect from '../components/SortSelect';
 import Pagination from '../components/Pagination';
-import MediaCard from '../components/MediaCard';
+import MediaCard, { type MediaCardMobileAction } from '../components/MediaCard';
 
 interface DiskStatus {
   storageId: string;
@@ -156,6 +156,60 @@ const QueueMediaCard = memo(function QueueMediaCard({
   onExclude: (item: MediaItem) => void;
   onDelete: (item: MediaItem) => void;
 }) {
+  const mobileActions: MediaCardMobileAction[] = [];
+
+  if (item.plexId && serviceUrls.plexMachineId && serviceUrls.plexPublicUrl) {
+    mobileActions.push({
+      key: 'plex',
+      label: 'Open in Plex',
+      href: `${serviceUrls.plexPublicUrl}/web/index.html#!/server/${serviceUrls.plexMachineId}/details?key=%2Flibrary%2Fmetadata%2F${item.plexId}`,
+      toneClassName: 'text-orange-300',
+    });
+  }
+
+  if (item.jellyfinId && serviceUrls.jellyfinPublicUrl) {
+    mobileActions.push({
+      key: 'jellyfin',
+      label: 'Open in Jellyfin',
+      href: `${serviceUrls.jellyfinPublicUrl}/web/index.html#!/details?id=${item.jellyfinId}`,
+      toneClassName: 'text-blue-300',
+    });
+  }
+
+  if (item.type === 'movie' && item.radarrId && serviceUrls.radarrUrl) {
+    mobileActions.push({
+      key: 'radarr',
+      label: 'Open in Radarr',
+      href: `${serviceUrls.radarrUrl}/movie/${item.radarrId}`,
+      toneClassName: 'text-yellow-300',
+    });
+  }
+
+  if (item.type === 'show' && item.sonarrId && serviceUrls.sonarrUrl) {
+    mobileActions.push({
+      key: 'sonarr',
+      label: 'Open in Sonarr',
+      href: `${serviceUrls.sonarrUrl}/series/${item.sonarrId}`,
+      toneClassName: 'text-teal-300',
+    });
+  }
+
+  mobileActions.push(
+    {
+      key: 'exclude',
+      label: 'Exclude from deletion',
+      onSelect: () => onExclude(item),
+      toneClassName: 'text-orange-300',
+    },
+    {
+      key: 'delete',
+      label: dryRun ? 'Simulate deletion' : 'Delete item',
+      onSelect: () => onDelete(item),
+      disabled: item.deleting,
+      toneClassName: 'text-red-300',
+    },
+  );
+
   return (
     <MediaCard
       posterUrl={item.posterUrl}
@@ -208,6 +262,7 @@ const QueueMediaCard = memo(function QueueMediaCard({
           </div>
         </div>
       }
+      mobileActions={mobileActions}
       info={
         <div className="translate-y-2 group-hover:translate-y-0 transition-transform">
           <h4 className="font-bold text-sm text-balance line-clamp-2 leading-tight drop-shadow-md">{item.title}</h4>

@@ -432,8 +432,8 @@ export default function Settings() {
 
   return (
     <div className="max-w-4xl mx-auto space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500 pb-12">
-      <header className="mb-8 flex items-center justify-between">
-        <div className="flex items-center gap-4">
+      <header className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-start gap-4">
           <div className="p-3 bg-cyan-500/10 rounded-2xl border border-cyan-500/20 shadow-[0_0_30px_rgba(34,211,238,0.15)]">
             <SettingsIcon className="w-8 h-8 text-cyan-400" />
           </div>
@@ -446,7 +446,7 @@ export default function Settings() {
         <button 
           onClick={handleSave} 
           disabled={saving}
-          className="px-6 py-2.5 bg-cyan-500 hover:bg-cyan-400 text-slate-900 font-bold rounded-xl shadow-[0_0_20px_rgba(34,211,238,0.3)] hover:shadow-[0_0_30px_rgba(34,211,238,0.5)] transition-all flex items-center gap-2 disabled:opacity-50"
+          className="w-full sm:w-auto justify-center px-6 py-2.5 bg-cyan-500 hover:bg-cyan-400 text-slate-900 font-bold rounded-xl shadow-[0_0_20px_rgba(34,211,238,0.3)] hover:shadow-[0_0_30px_rgba(34,211,238,0.5)] transition-all flex items-center gap-2 disabled:opacity-50"
         >
           <Save className="w-5 h-5" />
           {saving ? 'Saving...' : 'Save Config'}
@@ -462,7 +462,7 @@ export default function Settings() {
       <div className="grid gap-6">
 
         {/* Global Rules */}
-        <section className="bg-slate-800/50 backdrop-blur-md rounded-2xl p-6 border border-slate-700/50 shadow-xl">
+        <section className="bg-slate-800/50 backdrop-blur-md rounded-2xl p-4 sm:p-6 border border-slate-700/50 shadow-xl">
           <h3 className="text-xl font-semibold mb-6 flex items-center gap-2 text-slate-200">
             <Shield className="w-5 h-5 text-indigo-400" /> 
             Global Automation Rules
@@ -500,7 +500,7 @@ export default function Settings() {
 
           {/* Favorite Exclusion */}
           <div className="mt-6 pt-6 border-t border-slate-700/50 space-y-4">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div className="flex items-center gap-3">
                 <Heart className="w-5 h-5 text-pink-400" />
                 <span className="font-semibold text-slate-200">Exclude Favorite Medias</span>
@@ -520,7 +520,7 @@ export default function Settings() {
             {settings.excludeFavorites === 'true' && (
               <div className="space-y-4 pl-2 border-l-2 border-pink-500/30">
                 {/* All users toggle */}
-                <div className="flex items-center justify-between">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                   <span className="text-sm text-slate-300 font-medium">Apply to all users</span>
                   <label className="relative inline-flex items-center cursor-pointer">
                     <input
@@ -536,7 +536,7 @@ export default function Settings() {
                 {/* Per-user dual column picker */}
                 {settings.excludeFavoritesAllUsers === 'false' && (
                   <div className="space-y-2">
-                    <div className="flex items-center justify-between">
+                    <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                       <span className="text-xs text-slate-400">Select which users' favorites exclude medias from deletion</span>
                       <button
                         type="button"
@@ -549,7 +549,7 @@ export default function Settings() {
                       </button>
                     </div>
 
-                    <div className="flex gap-3 items-stretch">
+                    <div className="flex flex-col lg:flex-row gap-3 items-stretch">
                       {/* Left column — Ignored */}
                       <div className="flex-1 flex flex-col">
                         <div className="text-xs font-semibold text-slate-400 mb-1.5 px-1">Ignored Users</div>
@@ -576,7 +576,7 @@ export default function Settings() {
                       </div>
 
                       {/* Transfer buttons */}
-                      <div className="flex flex-col justify-center gap-1">
+                      <div className="flex flex-row lg:flex-col justify-center gap-1 self-center lg:self-auto">
                         <button type="button" onClick={() => moveToRight(false)} disabled={selectedLeft.length === 0}
                           title="Move selected →"
                           className="p-1.5 rounded bg-slate-700 hover:bg-pink-500/30 text-slate-300 hover:text-pink-300 disabled:opacity-30 transition-colors">
@@ -587,7 +587,7 @@ export default function Settings() {
                           className="p-1.5 rounded bg-slate-700 hover:bg-pink-500/30 text-slate-300 hover:text-pink-300 disabled:opacity-30 transition-colors">
                           <ChevronsRight className="w-4 h-4" />
                         </button>
-                        <div className="h-2" />
+                        <div className="w-2 lg:w-auto lg:h-2" />
                         <button type="button" onClick={() => moveToLeft(false)} disabled={selectedRight.length === 0}
                           title="← Move selected"
                           className="p-1.5 rounded bg-slate-700 hover:bg-slate-500/30 text-slate-300 hover:text-slate-200 disabled:opacity-30 transition-colors">
@@ -634,15 +634,15 @@ export default function Settings() {
         </section>
         
         {/* Core Settings */}
-        <section className="bg-slate-800/50 backdrop-blur-md rounded-2xl p-6 border border-slate-700/50 shadow-xl z-20">
-           <div className="flex justify-between items-center mb-6">
+        <section className="bg-slate-800/50 backdrop-blur-md rounded-2xl p-4 sm:p-6 border border-slate-700/50 shadow-xl z-20">
+           <div className="flex flex-col gap-3 sm:flex-row sm:justify-between sm:items-center mb-6">
               <h3 className="text-xl font-semibold flex items-center gap-2 text-slate-200">
                 <HardDrive className="w-5 h-5 text-cyan-400" /> 
                 Storage Configuration
               </h3>
               <button 
                 onClick={() => setStorages([...storages, { id: Date.now().toString(), name: 'New Storage', plexPath: '/', targetFreeSpace: 100 }])}
-                className="px-3 py-1.5 bg-cyan-500/20 text-cyan-400 rounded-lg text-sm font-semibold hover:bg-cyan-500/30 transition-colors"
+                className="w-full sm:w-auto px-3 py-1.5 bg-cyan-500/20 text-cyan-400 rounded-lg text-sm font-semibold hover:bg-cyan-500/30 transition-colors"
                >
                  + Add Storage
                </button>
@@ -652,7 +652,7 @@ export default function Settings() {
              {storages.length === 0 && <p className="text-slate-500 text-sm">No storages defined. Add one to track space and deletions.</p>}
              {storages.map((storage, idx) => (
                <div key={storage.id} className="p-4 bg-slate-900/50 rounded-xl border border-slate-700 relative">
-                 <div className="flex justify-between items-center mb-4 pb-2 border-b border-slate-800">
+                 <div className="flex items-start justify-between gap-3 mb-4 pb-2 border-b border-slate-800">
                    <h4 className="font-semibold text-slate-300">Storage #{idx + 1}</h4>
                    <button 
                      onClick={() => setStorages(s => s.filter(x => x.id !== storage.id))}
@@ -748,7 +748,7 @@ export default function Settings() {
         </section>
 
         {/* Media Providers */}
-        <section className="bg-slate-800/50 backdrop-blur-md rounded-2xl p-6 border border-slate-700/50 shadow-xl z-10">
+        <section className="bg-slate-800/50 backdrop-blur-md rounded-2xl p-4 sm:p-6 border border-slate-700/50 shadow-xl z-10">
           <h3 className="text-xl font-semibold mb-6 flex items-center gap-2 text-slate-200">
             <Server className="w-5 h-5 text-purple-400" /> 
             Media Providers
@@ -801,7 +801,7 @@ export default function Settings() {
         </section>
 
         {/* Download Clients */}
-        <section className="bg-slate-800/50 backdrop-blur-md rounded-2xl p-6 border border-slate-700/50 shadow-xl">
+        <section className="bg-slate-800/50 backdrop-blur-md rounded-2xl p-4 sm:p-6 border border-slate-700/50 shadow-xl">
           <h3 className="text-xl font-semibold mb-6 flex items-center gap-2 text-slate-200">
             <Shield className="w-5 h-5 text-orange-400" /> 
             Download Clients
@@ -833,7 +833,7 @@ export default function Settings() {
         </section>
 
         {/* OAuth / SSO */}
-        <section className="bg-slate-800/50 backdrop-blur-md rounded-2xl p-6 border border-slate-700/50 shadow-xl">
+        <section className="bg-slate-800/50 backdrop-blur-md rounded-2xl p-4 sm:p-6 border border-slate-700/50 shadow-xl">
           <h3 className="text-xl font-semibold mb-2 flex items-center gap-2 text-slate-200">
             <ShieldCheck className="w-5 h-5 text-cyan-400" />
             SSO / OAuth2
@@ -918,7 +918,7 @@ export default function Settings() {
         </section>
 
         {/* Security */}
-        <section className="bg-slate-800/50 backdrop-blur-md rounded-2xl p-6 border border-slate-700/50 shadow-xl">
+        <section className="bg-slate-800/50 backdrop-blur-md rounded-2xl p-4 sm:p-6 border border-slate-700/50 shadow-xl">
           <h3 className="text-xl font-semibold mb-6 flex items-center gap-2 text-slate-200">
             <KeyRound className="w-5 h-5 text-cyan-400" />
             Security

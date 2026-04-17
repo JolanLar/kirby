@@ -8,7 +8,7 @@ interface SearchInputProps {
 
 export default function SearchInput({ value, onChange, placeholder = 'Search...' }: SearchInputProps) {
   return (
-    <div className="relative">
+    <div className="relative w-full sm:w-auto">
       <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
       <input
         type="text"

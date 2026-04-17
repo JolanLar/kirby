@@ -13,7 +13,7 @@ function NavLink({ to, icon, label, activeColor = 'text-cyan-400' }: { to: strin
   return (
     <Link
       to={to}
-      className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-colors text-sm font-medium group ${active ? 'bg-slate-700/50 text-white' : 'text-slate-300 hover:bg-slate-700/50 hover:text-white'}`}
+      className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-colors text-sm font-medium group whitespace-nowrap ${active ? 'bg-slate-700/50 text-white' : 'text-slate-300 hover:bg-slate-700/50 hover:text-white'}`}
     >
       <span className={`transition-colors ${active ? activeColor : `text-slate-400 group-hover:${activeColor}`}`}>{icon}</span>
       {label}
@@ -35,9 +35,39 @@ function AppShell() {
   if (!authenticated) return <Login />;
 
   return (
-    <div className="min-h-screen flex text-slate-100 bg-slate-900 font-sans selection:bg-cyan-500/30">
+    <div className="min-h-screen md:flex text-slate-100 bg-slate-900 font-sans selection:bg-cyan-500/30">
+      <div className="md:hidden sticky top-0 z-30 border-b border-slate-700/50 bg-slate-900/95 backdrop-blur-xl">
+        <div className="flex items-center justify-between px-4 py-4">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="w-10 h-10 rounded-xl bg-linear-to-br from-cyan-400 to-blue-600 flex justify-center items-center shadow-lg shadow-cyan-500/20 shrink-0">
+              <Database className="text-white w-5 h-5" />
+            </div>
+            <div className="min-w-0">
+              <h1 className="font-bold text-lg tracking-tight bg-linear-to-r from-cyan-400 to-blue-500 bg-clip-text text-transparent">Kirby</h1>
+              <p className="text-xs text-slate-400 truncate">{username}</p>
+            </div>
+          </div>
+          <button
+            onClick={logout}
+            title="Sign out"
+            className="text-slate-400 hover:text-red-400 transition-colors ml-3 shrink-0"
+          >
+            <LogOut className="w-5 h-5" />
+          </button>
+        </div>
+
+        <nav className="px-4 pb-4 overflow-x-auto custom-scrollbar">
+          <div className="flex gap-2 min-w-max">
+            <NavLink to="/" icon={<Database className="w-4 h-4" />} label="Dashboard" />
+            <NavLink to="/exclusions" icon={<ShieldBan className="w-4 h-4" />} label="Exclusions" />
+            <NavLink to="/favorites" icon={<Heart className="w-4 h-4" />} label="Favorites" activeColor="text-pink-400" />
+            <NavLink to="/settings" icon={<SettingsIcon className="w-4 h-4" />} label="Settings" />
+          </div>
+        </nav>
+      </div>
+
       {/* Sidebar */}
-      <aside className="w-64 bg-slate-800/50 border-r border-slate-700/50 backdrop-blur-xl flex flex-col py-8 sticky top-0 h-screen">
+      <aside className="hidden md:flex w-64 bg-slate-800/50 border-r border-slate-700/50 backdrop-blur-xl flex-col py-8 sticky top-0 h-screen">
         <div className="flex items-center gap-3 mb-8 px-6">
           <div className="w-10 h-10 rounded-xl bg-linear-to-br from-cyan-400 to-blue-600 flex justify-center items-center shadow-lg shadow-cyan-500/20">
             <Database className="text-white w-5 h-5" />
@@ -68,7 +98,7 @@ function AppShell() {
       </aside>
 
       {/* Main content */}
-      <main className="flex-1 p-8 overflow-y-auto">
+      <main className="flex-1 min-w-0 p-4 sm:p-6 lg:p-8 overflow-y-auto">
         <Routes>
           <Route path="/" element={<Dashboard />} />
           <Route path="/exclusions" element={<Exclusions />} />

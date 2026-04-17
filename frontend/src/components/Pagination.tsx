@@ -13,13 +13,13 @@ export default function Pagination({ currentPage, totalPages, totalItems, pageSi
   if (totalPages <= 1) return null;
   const btnClass = 'p-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-400 hover:text-slate-200 hover:border-slate-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors';
   return (
-    <div className="flex items-center justify-between border-t border-slate-800/50 pt-4 mt-6">
-      <div className="text-sm text-slate-400">
+    <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between border-t border-slate-800/50 pt-4 mt-6">
+      <div className="text-sm text-slate-400 text-center sm:text-left">
         Showing <span className="font-semibold text-slate-300">{startIndex + 1}</span> to{' '}
         <span className="font-semibold text-slate-300">{Math.min(startIndex + pageSize, totalItems)}</span> of{' '}
         <span className="font-semibold text-slate-300">{totalItems}</span>
       </div>
-      <div className="flex items-center gap-2">
+      <div className="flex items-center justify-center gap-2 flex-wrap">
         <button onClick={() => onPageChange(1)} disabled={currentPage === 1} className={btnClass}>
           <ChevronsLeft className="w-4 h-4" />
         </button>

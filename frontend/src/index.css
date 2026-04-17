@@ -33,6 +33,10 @@ body {
     box-shadow: none;
   }
 
+  .media-card-shell .group-hover\:translate-y-0 {
+    transform: none !important;
+  }
+
   .media-card-shell:hover {
     transform: none !important;
   }
@@ -52,17 +56,35 @@ body {
   .media-card-hover-overlay {
     opacity: 1 !important;
     align-items: flex-end !important;
-    justify-content: center !important;
-    padding: 0.75rem !important;
-    background: linear-gradient(to top, rgba(0, 0, 0, 0.55), rgba(0, 0, 0, 0.05), transparent) !important;
+    justify-content: flex-end !important;
+    padding: 0.5rem !important;
+    background: linear-gradient(to top, rgba(0, 0, 0, 0.22), transparent 42%) !important;
   }
 
   .media-card-actions {
     opacity: 1 !important;
+    gap: 0.375rem !important;
+  }
+
+  .media-card-service-links {
+    display: none !important;
+  }
+
+  .media-card-mobile-action {
+    min-width: 2.25rem !important;
+    min-height: 2.25rem !important;
+    padding: 0.5rem !important;
+    border-radius: 9999px !important;
+    justify-content: center !important;
+  }
+
+  .media-card-action-label {
+    display: none !important;
   }
 
   .media-card-info {
     transform: none !important;
     transition: none !important;
+    padding-right: 0.75rem !important;
   }
 }

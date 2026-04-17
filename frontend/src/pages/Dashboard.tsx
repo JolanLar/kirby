@@ -170,7 +170,7 @@ const QueueMediaCard = memo(function QueueMediaCard({
       }
       topRight={
         <div className="media-card-actions opacity-0 group-hover:opacity-100 transition-opacity flex flex-col gap-1 items-end">
-          <div className="flex gap-1">
+          <div className="media-card-service-links flex gap-1">
             {item.plexId && serviceUrls.plexMachineId && serviceUrls.plexPublicUrl && (
               <a href={`${serviceUrls.plexPublicUrl}/web/index.html#!/server/${serviceUrls.plexMachineId}/details?key=%2Flibrary%2Fmetadata%2F${item.plexId}`}
                 target="_blank" rel="noopener noreferrer" title="Open in Plex"
@@ -198,11 +198,11 @@ const QueueMediaCard = memo(function QueueMediaCard({
           </div>
           <div className="flex gap-1.5">
             <button onClick={() => onExclude(item)} title="Exclude from deletion"
-              className="p-2 bg-orange-500 hover:bg-orange-400 text-white rounded-lg transition-colors shadow-lg">
+              className="media-card-mobile-action p-2 bg-orange-500 hover:bg-orange-400 text-white rounded-lg transition-colors shadow-lg">
               <ShieldBan className="w-4 h-4" />
             </button>
             <button onClick={() => onDelete(item)} title={dryRun ? 'Simulate deletion' : 'Delete item'}
-              className={`p-2 bg-red-500 hover:bg-red-400 text-white rounded-lg transition-colors shadow-lg ${item.deleting ? 'cursor-not-allowed' : 'cursor-pointer'}`}>
+              className={`media-card-mobile-action p-2 bg-red-500 hover:bg-red-400 text-white rounded-lg transition-colors shadow-lg ${item.deleting ? 'cursor-not-allowed' : 'cursor-pointer'}`}>
               {item.deleting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash className="w-4 h-4" />}
             </button>
           </div>

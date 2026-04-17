@@ -163,14 +163,14 @@ export default function Favorites() {
                         onClick={() => toggleIgnore(item)}
                         disabled={isToggling}
                         title={isIgnored ? "Re-activate favorite protection" : "Ignore favorite (re-enter deletion queue)"}
-                        className={`px-4 py-2 rounded-lg transition-colors shadow-lg flex items-center gap-2 font-medium text-sm disabled:opacity-50 ${
+                        className={`media-card-mobile-action px-4 py-2 rounded-lg transition-colors shadow-lg flex items-center gap-2 font-medium text-sm disabled:opacity-50 ${
                           isIgnored
                             ? 'bg-pink-500 hover:bg-pink-400 text-white'
                             : 'bg-orange-500 hover:bg-orange-400 text-white'
                         }`}
                       >
                         {isIgnored ? <Flame className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
-                        {isIgnored ? 'Restore' : 'Ignore'}
+                        <span className="media-card-action-label">{isIgnored ? 'Restore' : 'Ignore'}</span>
                       </button>
                     }
                     info={

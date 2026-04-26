@@ -149,7 +149,7 @@ export default function Settings() {
     jellyfinUrl: '', jellyfinApiKey: '', jellyfinPublicUrl: '',
     sonarrUrl: '', sonarrApiKey: '',
     radarrUrl: '', radarrApiKey: '',
-    qbUrl: '', qbUser: '', qbPass: '',
+    qbUrl: '', qbUser: '', qbPass: '', qbCrossSeedSearch: 'false',
     autoExcludeThreshold: '0',
     deletionIntervalMinutes: '5',
     deletionDeltaDays: '0',
@@ -827,6 +827,24 @@ export default function Settings() {
                <InputGroup label="qBittorrent URL" name="qbUrl" value={settings.qbUrl} onChange={handleChange} placeholder="http://192.168.1.100:8080" />
                <InputGroup label="Username" name="qbUser" value={settings.qbUser} onChange={handleChange} />
                <InputGroup label="Password" name="qbPass" value={settings.qbPass} onChange={handleChange} type="password" />
+               <div className="flex flex-col gap-2 rounded-lg border border-slate-700/50 bg-slate-900/40 p-3">
+                 <div className="flex items-center justify-between gap-3">
+                   <div className="flex items-center gap-2">
+                     <span className="text-sm font-medium text-slate-300">Cross-seed search</span>
+                     <Tooltip text="When deleting media, search qBittorrent for torrents with the same normalized file manifest and delete those linked cross-seeds too. Leave disabled if you only want Kirby to delete the Arr download hashes." />
+                   </div>
+                   <label className="relative inline-flex items-center cursor-pointer">
+                     <input
+                       type="checkbox"
+                       checked={settings.qbCrossSeedSearch === 'true'}
+                       onChange={e => setSettings(s => ({ ...s, qbCrossSeedSearch: e.target.checked ? 'true' : 'false' }))}
+                       className="sr-only peer"
+                     />
+                     <div className="w-11 h-6 bg-slate-700 peer-focus:ring-2 peer-focus:ring-orange-500/50 rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:inset-s-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-orange-500"></div>
+                   </label>
+                 </div>
+                 <p className="text-xs text-slate-500">Uses qBittorrent metadata only; no media mount is required.</p>
+               </div>
                <TestButton service="qbittorrent" status={testStatus['qbittorrent'] || 'idle'} onTest={handleTest} />
             </div>
           </div>

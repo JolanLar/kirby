@@ -363,10 +363,15 @@ export async function deleteItem(item: MediaItem) {
         }
       }
 
-      const linkedHashes = await findLinkedTorrentHashes(hashes);
+      const crossSeedSearchEnabled = getSetting('qbCrossSeedSearch', 'false') === 'true';
+      if (!crossSeedSearchEnabled) {
+        logger.debug('[Delete] qBittorrent cross-seed search disabled.');
+      }
+      const linkedHashes = crossSeedSearchEnabled ? await findLinkedTorrentHashes(hashes) : [];
       const selectedHashes = [...hashes, ...linkedHashes];
       logger.info(`${dryRun ? '[Dry Run]' : '[Delete]'} qBittorrent hashes selected for ${item.title}: ${selectedHashes.join(', ') || 'none'}`);
       debugObject('[Delete] Matching qBittorrent torrents', {
+        crossSeedSearchEnabled,
         originalHashes: hashes,
         linkedHashes,
         selectedHashes,

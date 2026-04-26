@@ -2,6 +2,7 @@ import Database from 'better-sqlite3';
 import path from 'path';
 import fs from 'fs';
 import { StorageConfig, MediaItem } from './models';
+import { logger } from './logger';
 
 const dbPath = process.env.DB_PATH || path.join(__dirname, '..', 'data', 'kirby.db');
 
@@ -19,7 +20,7 @@ function migrateSchemaToV2() {
   if (!info) return; // Fresh install, tables not created yet
   if (/PRIMARY KEY\s*\(\s*tmdbId\s*,\s*type\s*\)/i.test(info.sql)) return; // Already migrated
 
-  console.log('[DB] Migrating schema to v2 (composite primary keys)...');
+  logger.info('[DB] Migrating schema to v2 (composite primary keys)...');
 
   try {
     db.exec(`
@@ -38,7 +39,7 @@ function migrateSchemaToV2() {
       DROP TABLE exclusions;
       ALTER TABLE exclusions_v2 RENAME TO exclusions;
     `);
-  } catch(e) { console.error('[DB] Failed to migrate exclusions table:', e); }
+  } catch(e) { logger.error('[DB] Failed to migrate exclusions table:', e); }
 
   try {
     db.exec(`
@@ -55,7 +56,7 @@ function migrateSchemaToV2() {
       DROP TABLE delete_history;
       ALTER TABLE delete_history_v2 RENAME TO delete_history;
     `);
-  } catch(e) { console.error('[DB] Failed to migrate delete_history table:', e); }
+  } catch(e) { logger.error('[DB] Failed to migrate delete_history table:', e); }
 
   try {
     db.exec(`
@@ -75,9 +76,9 @@ function migrateSchemaToV2() {
       DROP TABLE favorites;
       ALTER TABLE favorites_v2 RENAME TO favorites;
     `);
-  } catch(e) { console.error('[DB] Failed to migrate favorites table:', e); }
+  } catch(e) { logger.error('[DB] Failed to migrate favorites table:', e); }
 
-  console.log('[DB] Schema migration to v2 complete.');
+  logger.info('[DB] Schema migration to v2 complete.');
 }
 
 export function initDb() {

@@ -21,6 +21,7 @@ WORKDIR /app
 # Set Node environment to production
 ENV NODE_ENV=production
 ENV PORT=4000
+ENV LOG_LEVEL=info
 
 # Copy backend package.json and install only production dependencies
 COPY backend/package*.json ./backend/

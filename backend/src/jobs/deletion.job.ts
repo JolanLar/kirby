@@ -6,6 +6,7 @@ import { deleteShowFromSonarr, getShowsFromSonarr, searchSonarrSerie, getDownloa
 import { deleteManyFromQBittorrent, findLinkedTorrentHashes } from '../services/qbittorrent.service';
 import { isExcluded, getStorages, recordDeletion, getDeleteHistoryCounts, getSetting, addExclusion, isFavoritedAndNotIgnored, upsertFavorite, removeStaleFavorites, updateFavoriteLastSeen } from '../db';
 import { MediaItem } from '../models';
+import { logger } from '../logger';
 
 export let deletionQueue: Record<string, MediaItem[]> = {};
 
@@ -30,7 +31,7 @@ function scheduleNextDeletionRun(delayMs = getDeletionIntervalMinutes() * 60 * 1
   nextRunAt = Date.now() + delayMs;
   deletionTimer = setTimeout(() => {
     runDeletionCycle().catch(err => {
-      console.error('[Job] Unhandled deletion cycle error:', err);
+      logger.error('[Job] Unhandled deletion cycle error:', err);
       scheduleNextDeletionRun();
     });
   }, delayMs);
@@ -252,7 +253,7 @@ export function refreshQueue(): Promise<Record<string, MediaItem[]>> {
 }
 
 export async function processDeletion() {
-  console.log('[Job] Running deletion evaluation...');
+  logger.info('[Job] Running deletion evaluation...');
   try {
     const queueMap = await refreshQueue();
     const storages = getStorages();
@@ -266,47 +267,50 @@ export async function processDeletion() {
       const disk = await getDiskStatus(storage);
       
       if (disk.error) {
-         console.error(`[Job] Cannot process deletion for ${storage.name} because disk check failed: ${disk.error}`);
+         logger.error(`[Job] Cannot process deletion for ${storage.name} because disk check failed: ${disk.error}`);
          continue;
       }
 
-      console.log(`[Job] [${storage.name}] Disk Free Space: ${disk.freeBytes.toFixed(2)}GB. Target: ${targetFreeSpace}GB`);
+      logger.debug(`[Job] [${storage.name}] Disk Free Space: ${disk.freeBytes.toFixed(2)}GB. Target: ${targetFreeSpace}GB`);
 
       if (disk.freeBytes < targetFreeSpace) {
         const queue = queueMap[storage.id] || [];
         if (queue.length > 0) {
           const oldestItem = queue[0];
-          console.log(`[Job] [${storage.name}] Target saturation exceeded! Attempting to delete: ${oldestItem.title} (Seen: ${new Date(oldestItem.lastSeenAt).toISOString()})`);
+          logger.info(`[Job] [${storage.name}] Target saturation exceeded. Attempting to delete: ${oldestItem.title} (Seen: ${new Date(oldestItem.lastSeenAt).toISOString()})`);
           
           const deleted = await deleteItem(oldestItem);
 
           if (deleted) {
             deletionQueue[storage.id] = deletionQueue[storage.id].filter(i => !(i.tmdbId === oldestItem.tmdbId && i.type === oldestItem.type));
           } else {
-            console.log(`[Job] [${storage.name}] Could not delete item: ${oldestItem.title}. Skipping until next run or exclusion...`);
+            logger.warn(`[Job] [${storage.name}] Could not delete item: ${oldestItem.title}. Skipping until next run or exclusion...`);
           }
         } else {
-          console.log(`[Job] [${storage.name}] Target saturation exceeded, but no eligible media found to delete.`);
+          logger.info(`[Job] [${storage.name}] Target saturation exceeded, but no eligible media found to delete.`);
         }
       }
     }
   } catch (err: any) {
-    console.error(`[Job] Error in deletion process: ${err.message}`);
+    logger.error(`[Job] Error in deletion process: ${err.message}`);
   }
 }
 
 export async function deleteItem(item: MediaItem) {
       if (isDryRunEnabled()) {
-        console.log(`[Dry Run] Would delete ${item.type}: ${item.title}`);
+        logger.info(`[Dry Run] Would delete ${item.type}: ${item.title}`);
         recordDeletion(item);
         return true;
       }
 
+      logger.info(`[Delete] Starting deletion for ${item.type}: ${item.title} (tmdbId: ${item.tmdbId})`);
       if (item.type === 'show') {
         const serie = await searchSonarrSerie(item);
         if (serie) {
           const hashes = await getDownloadIdsFromSonarr(serie);
+          logger.debug(`[Delete] Sonarr download hashes for ${item.title}: ${hashes.join(', ') || 'none'}`);
           const linkedHashes = await findLinkedTorrentHashes(hashes);
+          logger.info(`[Delete] qBittorrent hashes selected for ${item.title}: ${[...hashes, ...linkedHashes].join(', ') || 'none'}`);
           await deleteManyFromQBittorrent([...hashes, ...linkedHashes]);
           await deleteShowFromSonarr(serie);
         }
@@ -314,7 +318,9 @@ export async function deleteItem(item: MediaItem) {
         const movie = await searchRadarrMovie(item);
         if (movie) {
           const hashes = await getDownloadIdsFromRadarr(movie);
+          logger.debug(`[Delete] Radarr download hashes for ${item.title}: ${hashes.join(', ') || 'none'}`);
           const linkedHashes = await findLinkedTorrentHashes(hashes);
+          logger.info(`[Delete] qBittorrent hashes selected for ${item.title}: ${[...hashes, ...linkedHashes].join(', ') || 'none'}`);
           await deleteManyFromQBittorrent([...hashes, ...linkedHashes]);
           await deleteMovieFromRadarr(movie);
         }
@@ -334,7 +340,7 @@ export async function deleteItem(item: MediaItem) {
 
 export function startDeletionJob() {
   runDeletionCycle().catch(err => {
-    console.error('[Job] Failed to start deletion job:', err);
+    logger.error('[Job] Failed to start deletion job:', err);
     scheduleNextDeletionRun();
   });
 }

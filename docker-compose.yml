@@ -10,3 +10,5 @@ services:
     environment:
       - PORT=4000
       - TZ=Europe/Paris
+      - LOG_LEVEL=info
+      - DRY_RUN=false

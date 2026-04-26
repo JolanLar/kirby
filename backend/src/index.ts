@@ -13,6 +13,7 @@ import { getPlexPin, getPlexToken, getPlexResources, getMappingPaths as getPlexM
 import { getDiscovery, testDiscovery, invalidateDiscoveryCache, generateCodeVerifier, generateCodeChallenge, createState, consumeState, isOAuthEnabled, extractUsername } from './services/oauth.service';
 import { startDeletionJob, deletionQueue, removeFromQueue, refreshQueue, deleteItem, isQueueRefreshing, getDeletionJobStatus, restartDeletionJob } from './jobs/deletion.job';
 import { requireAuth, signToken, verifyToken, hashPassword, checkPassword } from './auth';
+import { logger } from './logger';
 
 const app = express();
 const port = process.env.PORT || 4000;
@@ -113,7 +114,7 @@ app.get('/api/auth/oauth/start', async (req, res) => {
 
     res.redirect(`${discovery.authorization_endpoint}?${params}`);
   } catch (err: any) {
-    console.error('[OAuth] Failed to start OAuth flow:', err.message);
+    logger.error('[OAuth] Failed to start OAuth flow:', err.message);
     res.redirect('/login?error=' + encodeURIComponent(err.message || 'OAuth start failed'));
   }
 });
@@ -163,7 +164,7 @@ app.get('/api/auth/oauth/callback', async (req, res) => {
     res.cookie('auth_token', jwt, { httpOnly: true, sameSite: 'lax', maxAge: 30 * 24 * 60 * 60 * 1000 });
     res.redirect('/');
   } catch (err: any) {
-    console.error('[OAuth] Callback error:', err.message);
+    logger.error('[OAuth] Callback error:', err.message);
     res.redirect('/login?error=' + encodeURIComponent(err.response?.data?.error_description || err.message || 'Authentication failed'));
   }
 });
@@ -285,7 +286,7 @@ app.patch('/api/favorites/:type/:tmdbId/ignore', async (req, res) => {
   const { tmdbId, type } = req.params;
   const { ignore } = req.body;
   setIgnoreFavorite(tmdbId, type, !!ignore);
-  refreshQueue().catch(console.error);
+  refreshQueue().catch(err => logger.error('[Queue] Failed to refresh after favorite ignore change:', err));
   res.json({ success: true });
 });
 
@@ -297,7 +298,7 @@ app.post('/api/dev/seed-history', (req, res) => {
   allItems.forEach((item, i) => {
     seedDeletionHistory(item.tmdbId, item.title, item.type, counts[i] || 1, item.lastSeenAt);
   });
-  refreshQueue().catch(console.error);
+  refreshQueue().catch(err => logger.error('[Queue] Failed to refresh after seeding history:', err));
   res.json({ seeded: allItems.length, items: allItems.map(i => ({ title: i.title, count: counts[allItems.indexOf(i)] || 1 })) });
 });
 
@@ -354,7 +355,7 @@ app.post('/api/delete', async (req, res) => {
 });
 
 app.listen(port, () => {
-  console.log(`Server is running on http://localhost:${port}`);
+  logger.info(`Server is running on http://localhost:${port} (log level: ${logger.level})`);
   startDeletionJob();
 });
 

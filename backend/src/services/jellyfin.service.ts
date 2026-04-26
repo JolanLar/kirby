@@ -1,6 +1,7 @@
 import axios from 'axios';
 import { getSetting } from '../db';
 import { MediaItem } from '../models';
+import { logger } from '../logger';
 
 function buildJellyfinPosterUrl(baseUrl: string, itemId: string, width = 342, quality = 70) {
   const normalizedBase = baseUrl.replace(/\/$/, '');
@@ -58,7 +59,7 @@ async function getAllUsersItems(client: any): Promise<MediaItem[]> {
         }
       }
     } catch (e: any) {
-      console.error(`[Jellyfin] Failed to fetch played items for user ${user.Id}: ${e.message}`);
+      logger.error(`[Jellyfin] Failed to fetch played items for user ${user.Id}: ${e.message}`);
     }
   }));
 
@@ -70,7 +71,7 @@ export async function getJellyfinItems(): Promise<MediaItem[]> {
   const apiKey = getSetting('jellyfinApiKey');
 
   if (!url || !apiKey) {
-    console.log('[Jellyfin] Not configured.');
+    logger.debug('[Jellyfin] Not configured.');
     return [];
   }
 
@@ -85,7 +86,7 @@ export async function getJellyfinItems(): Promise<MediaItem[]> {
 
     return await getAllUsersItems(client);
   } catch (err: any) {
-    console.error(`[Jellyfin] Failed to fetch items: ${err.message}`);
+    logger.error(`[Jellyfin] Failed to fetch items: ${err.message}`);
     return [];
   }
 }
@@ -95,7 +96,7 @@ export async function deleteJellyfinItem(itemId: string): Promise<boolean> {
   const apiKey = getSetting('jellyfinApiKey');
 
   if (!url || !apiKey) {
-    console.error(`[Jellyfin] Not configured.`);
+    logger.error(`[Jellyfin] Not configured.`);
     return false;
   }
 
@@ -108,11 +109,11 @@ export async function deleteJellyfinItem(itemId: string): Promise<boolean> {
       }
     });
 
-    console.log(`[Jellyfin] Deleting item (ID: ${itemId})...`);
+    logger.info(`[Jellyfin] Deleting item (ID: ${itemId})...`);
     await client.delete(`/Items/${itemId}`);
     return true;
   } catch (err: any) {
-    console.error(`[Jellyfin] Failed to delete item ${itemId}: ${err.message}`);
+    logger.error(`[Jellyfin] Failed to delete item ${itemId}: ${err.message}`);
     return false;
   }
 }
@@ -135,7 +136,7 @@ export async function getJellyfinPaths(url: string = getSetting('jellyfinUrl'), 
     const folders = res.data || [];
     return folders.flatMap((f: any) => f.Locations || []);
   } catch (err: any) {
-    console.error(`[Jellyfin] Failed to fetch paths: ${err.message}`);
+    logger.error(`[Jellyfin] Failed to fetch paths: ${err.message}`);
     return [];
   }
 }
@@ -165,7 +166,7 @@ export async function getJellyfinUsers(): Promise<string[]> {
     const res = await client.get('/Users');
     return (res.data || []).map((u: any) => u.Name);
   } catch (err: any) {
-    console.error(`[Jellyfin] Failed to fetch users: ${err.message}`);
+    logger.error(`[Jellyfin] Failed to fetch users: ${err.message}`);
     return [];
   }
 }
@@ -220,13 +221,13 @@ export async function getJellyfinFavorites(includeUsers?: string[]): Promise<Jel
           }
         }
       } catch (e: any) {
-        console.error(`[Jellyfin] Failed to fetch favorites for user ${user.Name}: ${e.message}`);
+        logger.error(`[Jellyfin] Failed to fetch favorites for user ${user.Name}: ${e.message}`);
       }
     }));
 
     return Array.from(favMap.values());
   } catch (err: any) {
-    console.error(`[Jellyfin] Failed to fetch favorites: ${err.message}`);
+    logger.error(`[Jellyfin] Failed to fetch favorites: ${err.message}`);
     return [];
   }
 }

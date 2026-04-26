@@ -45,7 +45,9 @@ services:
     volumes:
       - ./config:/app/backend/data
     environment:
+      - PORT=4000
       - TZ=Europe/Paris
+      - LOG_LEVEL=info
 ```
 
 ```bash
@@ -61,6 +63,20 @@ docker compose -f docker-compose.yml -f docker-compose.dry-run.yml up -d
 ```
 
 This enables `DRY_RUN=true`, which keeps queue refreshes and deletion history intact while turning delete actions into simulations.
+
+### Logging
+
+Kirby logs to stdout/stderr and can be tuned with `LOG_LEVEL`.
+
+| Level | Output |
+| ----- | ------ |
+| `error` | Only failures |
+| `warn` | Warnings and failures |
+| `info` | Normal lifecycle and deletion activity (default) |
+| `debug` | Verbose diagnostics, including storage checks, Arr download hashes, and qBittorrent cross-seed matching |
+| `silent` | No application logs |
+
+Set `LOG_LEVEL=debug` when troubleshooting deletion decisions or cross-seed torrent matching.
 
 ---
 

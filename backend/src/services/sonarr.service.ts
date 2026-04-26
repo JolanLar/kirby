@@ -1,13 +1,14 @@
 import axios from 'axios';
 import { getSetting } from '../db';
 import { MediaItem, SonarrSeries, RootFolder } from '../models';
+import { logger } from '../logger';
 
 export async function getShowsFromSonarr(): Promise<SonarrSeries[]> {
   const url = getSetting('sonarrUrl');
   const apiKey = getSetting('sonarrApiKey');
 
   if (!url || !apiKey) {
-    console.log('[Sonarr] Not configured.');
+    logger.debug('[Sonarr] Not configured.');
     return [];
   }
 
@@ -23,7 +24,7 @@ export async function getShowsFromSonarr(): Promise<SonarrSeries[]> {
 
     return series;
   } catch (err: any) {
-    console.error(`[Sonarr] Error fetching series: ${err.message}`);
+    logger.error(`[Sonarr] Error fetching series: ${err.message}`);
     return [];
   }
 }
@@ -38,10 +39,10 @@ export async function deleteShowFromSonarr(serie: SonarrSeries): Promise<boolean
       headers: { 'X-Api-Key': apiKey }
     });
     await client.delete(`/api/v3/series/${serie.id}?deleteFiles=true`);
-    console.log(`[Sonarr] Serie ${serie.title} (ID: ${serie.id}) deleted.`);
+    logger.info(`[Sonarr] Serie ${serie.title} (ID: ${serie.id}) deleted.`);
     return true;
   } catch (err: any) {
-    console.error(`[Sonarr] Error deleting serie ${serie.title} (tmdbId: ${serie.tmdbId}): ${err.message}`);
+    logger.error(`[Sonarr] Error deleting serie ${serie.title} (tmdbId: ${serie.tmdbId}): ${err.message}`);
     return false;
   }
 }
@@ -51,10 +52,10 @@ export async function searchSonarrSerie(item: MediaItem): Promise<SonarrSeries|u
     const series = await getShowsFromSonarr();
     let foundSeries = series.find((s: any) => s.tmdbId === Number(item.tmdbId));
     if (!foundSeries)
-      console.error(`[Sonarr] Error finding serie (tmdbId: ${item.tmdbId}): missing from sonarr instance`);
+      logger.warn(`[Sonarr] Error finding serie (tmdbId: ${item.tmdbId}): missing from sonarr instance`);
     return foundSeries
   } catch (err: any) {
-    console.error(`[Sonarr] Error finding serie (tmdbId: ${item.tmdbId}): ${err.message}`);
+    logger.error(`[Sonarr] Error finding serie (tmdbId: ${item.tmdbId}): ${err.message}`);
     return undefined
   }
 }
@@ -65,7 +66,7 @@ export async function getDownloadIdsFromSonarr(serie: SonarrSeries): Promise<str
     const url = getSetting('sonarrUrl');
     const apiKey = getSetting('sonarrApiKey');
     if (!url || !apiKey) {
-      console.log('[Sonarr] Not configured.');
+      logger.debug('[Sonarr] Not configured.');
       return [];
     }
     const client = axios.create({
@@ -76,7 +77,7 @@ export async function getDownloadIdsFromSonarr(serie: SonarrSeries): Promise<str
     const episodes = res.data.episodes;
     return [...new Set(episodes.map((e: any) => e.downloadId).filter((id: string) => id))] as string[];
   } catch (err: any) {
-    console.error(`[Sonarr] Error getting download ID: ${err.message}`);
+    logger.error(`[Sonarr] Error getting download ID: ${err.message}`);
     return [];
   }
 }
@@ -95,7 +96,7 @@ export async function getRootFolders(url: string = getSetting('sonarrUrl'), apiK
     return res.data || [];
   } catch (err: any) {
     if (err.response?.status !== 404) {
-      console.error(`[Sonarr] Error getting root folders: ${err.message}`);
+      logger.error(`[Sonarr] Error getting root folders: ${err.message}`);
     }
     return [];
   }

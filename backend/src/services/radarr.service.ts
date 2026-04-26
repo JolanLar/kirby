@@ -1,13 +1,14 @@
 import axios from 'axios';
 import { getSetting } from '../db';
 import { MediaItem, RadarrMovie, RootFolder } from '../models';
+import { logger } from '../logger';
 
 export async function getMoviesFromRadarr(): Promise<RadarrMovie[]> {
   const url = getSetting('radarrUrl');
   const apiKey = getSetting('radarrApiKey');
 
   if (!url || !apiKey) {
-    console.log('[Radarr] Not configured.');
+    logger.debug('[Radarr] Not configured.');
     return [];
   }
 
@@ -23,7 +24,7 @@ export async function getMoviesFromRadarr(): Promise<RadarrMovie[]> {
 
     return movies;
   } catch (err: any) {
-    console.error(`[Radarr] Error fetching movies: ${err.message}`);
+    logger.error(`[Radarr] Error fetching movies: ${err.message}`);
     return [];
   }
 }
@@ -33,10 +34,10 @@ export async function searchRadarrMovie(item: MediaItem): Promise<RadarrMovie|un
     const movies = await getMoviesFromRadarr();
     const foundMovie = movies.find((m: RadarrMovie) => m.tmdbId == item.tmdbId)
     if (!foundMovie)
-      console.error(`[Radarr] Error finding serie (tmdbId: ${item.tmdbId}): missing from radarr instance`);
+      logger.warn(`[Radarr] Error finding movie (tmdbId: ${item.tmdbId}): missing from radarr instance`);
     return foundMovie
   } catch (err: any) {
-    console.error(`[Radarr] Error finding movie (tmdbId: ${item.tmdbId}): ${err.message}`);
+    logger.error(`[Radarr] Error finding movie (tmdbId: ${item.tmdbId}): ${err.message}`);
     return undefined
   }
 }
@@ -51,10 +52,10 @@ export async function deleteMovieFromRadarr(movie: RadarrMovie): Promise<boolean
       headers: { 'X-Api-Key': apiKey }
     });
     await client.delete(`/api/v3/movie/${movie.id}?deleteFiles=true`);
-    console.log(`[Radarr] Movie ${movie.title} (ID: ${movie.id}) deleted.`);
+    logger.info(`[Radarr] Movie ${movie.title} (ID: ${movie.id}) deleted.`);
     return true;
   } catch (err: any) {
-    console.error(`[Radarr] Error deleting movie: ${err.message}`);
+    logger.error(`[Radarr] Error deleting movie: ${err.message}`);
     return false;
   }
 }
@@ -64,7 +65,7 @@ export async function getDownloadIdsFromRadarr(movie: RadarrMovie): Promise<stri
   const apiKey = getSetting('radarrApiKey');
 
   if (!url || !apiKey) {
-    console.log('[Radarr] Not configured.');
+    logger.debug('[Radarr] Not configured.');
     return [];
   }
 
@@ -77,7 +78,7 @@ export async function getDownloadIdsFromRadarr(movie: RadarrMovie): Promise<stri
     const history = res.data;
     return [...new Set(history.map((h: any) => h.downloadId).filter((id: string) => id))] as string[];
   } catch (err: any) {
-    console.error(`[Radarr] Error getting download ID: ${err.message}`);
+    logger.error(`[Radarr] Error getting download ID: ${err.message}`);
     return [];
   }
 }
@@ -96,7 +97,7 @@ export async function getRootFolders(url: string = getSetting('radarrUrl'), apiK
     return res.data || [];
   } catch (err: any) {
     if (err.response?.status !== 404) {
-      console.error(`[Radarr] Error getting root folders: ${err.message}`);
+      logger.error(`[Radarr] Error getting root folders: ${err.message}`);
     }
     return [];
   }

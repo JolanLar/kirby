@@ -1,5 +1,6 @@
 import axios from 'axios';
 import { getSetting } from '../db';
+import { logger } from '../logger';
 
 let qbCookie: string | null = null;
 
@@ -35,7 +36,7 @@ async function authQBittorrent(url: string, user: string, pass: string): Promise
     }
     return false;
   } catch (err: any) {
-    console.error(`[QBittorrent] Auth failed: ${err.message}`);
+    logger.error(`[QBittorrent] Auth failed: ${err.message}`);
     return false;
   }
 }
@@ -46,7 +47,7 @@ function getQBittorrentConfig(): QBittorrentConfig | null {
   const pass = getSetting('qbPass');
 
   if (!url) {
-    console.log('[QBittorrent] Not configured.');
+    logger.debug('[QBittorrent] Not configured.');
     return null;
   }
 
@@ -70,7 +71,7 @@ async function getQBittorrent<T>(config: QBittorrentConfig, path: string): Promi
     });
     return res.data;
   } catch (err: any) {
-    console.error(`[QBittorrent] Error fetching ${path}: ${err.message}`);
+    logger.error(`[QBittorrent] Error fetching ${path}: ${err.message}`);
     return null;
   }
 }
@@ -111,8 +112,10 @@ export async function findLinkedTorrentHashes(hashes: string[]): Promise<string[
   if (originalHashes.length === 0) return [];
 
   try {
+    logger.debug(`[QBittorrent] Looking for linked cross-seeds for hashes: ${originalHashes.join(', ')}`);
     const torrents = await getTorrents(config);
     if (torrents.length === 0) return [];
+    logger.debug(`[QBittorrent] Loaded ${torrents.length} torrents for cross-seed matching.`);
 
     const torrentsByHash = new Map(torrents.map(torrent => [torrent.hash.toLowerCase(), torrent]));
     const originalHashSet = new Set(originalHashes.map(hash => hash.toLowerCase()));
@@ -121,29 +124,33 @@ export async function findLinkedTorrentHashes(hashes: string[]): Promise<string[
     for (const hash of originalHashes) {
       const original = torrentsByHash.get(hash.toLowerCase());
       if (!original) {
-        console.log(`[QBittorrent] Torrent ${hash} not found while looking for linked cross-seeds.`);
+        logger.warn(`[QBittorrent] Torrent ${hash} not found while looking for linked cross-seeds.`);
         continue;
       }
 
       const originalManifest = await getTorrentManifest(config, original.hash);
       if (!originalManifest) continue;
+      logger.debug(`[QBittorrent] Matching manifest for ${original.name} (${original.hash}, ${original.total_size} bytes).`);
 
       for (const candidate of torrents) {
         if (originalHashSet.has(candidate.hash.toLowerCase())) continue;
         if (candidate.total_size !== original.total_size) continue;
 
         const candidateManifest = await getTorrentManifest(config, candidate.hash);
-        if (candidateManifest === originalManifest) linkedHashes.add(candidate.hash);
+        if (candidateManifest === originalManifest) {
+          linkedHashes.add(candidate.hash);
+          logger.debug(`[QBittorrent] Linked cross-seed match: ${candidate.name} (${candidate.hash}).`);
+        }
       }
     }
 
     const result = [...linkedHashes];
     if (result.length > 0) {
-      console.log(`[QBittorrent] Found linked cross-seed torrents: ${result.join(', ')}`);
+      logger.info(`[QBittorrent] Found linked cross-seed torrents: ${result.join(', ')}`);
     }
     return result;
   } catch (err: any) {
-    console.error(`[QBittorrent] Error finding linked torrents: ${err.message}`);
+    logger.error(`[QBittorrent] Error finding linked torrents: ${err.message}`);
     return [];
   }
 }
@@ -158,7 +165,7 @@ export async function deleteManyFromQBittorrent(hashes: string[]): Promise<boole
   if (!await ensureQBittorrentAuth(config)) return false;
 
   try {    
-    console.log(`[QBittorrent] Deleting torrents ${uniqueHashes.join(', ')}...`);
+    logger.info(`[QBittorrent] Deleting torrents ${uniqueHashes.join(', ')}...`);
     // Delete torrent and files (deleteFiles=true)
     await axios.post(`${config.url}/api/v2/torrents/delete`, `hashes=${uniqueHashes.map(encodeURIComponent).join('|')}&deleteFiles=true`, {
       headers: {
@@ -168,7 +175,7 @@ export async function deleteManyFromQBittorrent(hashes: string[]): Promise<boole
     });
     return true;
   } catch (err: any) {
-    console.error(`[QBittorrent] Error deleting torrent: ${err.message}`);
+    logger.error(`[QBittorrent] Error deleting torrent: ${err.message}`);
     return false;
   }
 }

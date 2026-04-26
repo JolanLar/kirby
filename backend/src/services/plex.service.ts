@@ -1,6 +1,7 @@
 import axios from 'axios';
 import { getSetting, setSetting } from '../db';
 import { MediaItem } from '../models';
+import { logger } from '../logger';
 
 const PLEX_HEADERS = {
   'X-Plex-Product': 'Kirby',
@@ -37,7 +38,7 @@ export async function getPlexItems(): Promise<MediaItem[]> {
   const publicUrl = getSetting('plexPublicUrl');
 
   if (!url || !token) {
-    console.log('[Plex] Not configured.');
+    logger.debug('[Plex] Not configured.');
     return [];
   }
 
@@ -83,7 +84,7 @@ export async function getPlexItems(): Promise<MediaItem[]> {
 
     return items;
   } catch (err: any) {
-    console.error(`[Plex] Failed to fetch items: ${err.message}`);
+    logger.error(`[Plex] Failed to fetch items: ${err.message}`);
     return [];
   }
 }
@@ -93,7 +94,7 @@ export async function deletePlexItem(plexId: string): Promise<boolean> {
   const token = getSetting('plexToken');
 
   if (!url || !token) {
-    console.error(`[Plex] Not configured.`);
+    logger.error(`[Plex] Not configured.`);
     return false;
   }
 
@@ -106,18 +107,18 @@ export async function deletePlexItem(plexId: string): Promise<boolean> {
       }
     });
 
-    console.log(`[Plex] Deleting item (ID: ${plexId})...`);
+    logger.info(`[Plex] Deleting item (ID: ${plexId})...`);
     await client.delete(`/library/metadata/${plexId}`);
     return true;
   } catch (err: any) {
-    console.error(`[Plex] Failed to delete item ${plexId}: ${err.message}`);
+    logger.error(`[Plex] Failed to delete item ${plexId}: ${err.message}`);
     return false;
   }
 }
 
 export async function getPlexPaths(url: string = getSetting('plexUrl'), token: string = getSetting('plexToken')): Promise<string[]> {
   if (!url || !token) {
-    console.log('[Plex] Not configured.');
+    logger.debug('[Plex] Not configured.');
     return [];
   }
 
@@ -133,7 +134,7 @@ export async function getPlexPaths(url: string = getSetting('plexUrl'), token: s
     const libsRes = await client.get('/library/sections/all');
     return libsRes.data?.MediaContainer?.Directory?.flatMap((d: any) => d.Location?.flatMap((l: any) => l.path)) || [];
   } catch (err: any) {
-    console.error(`[Plex] Failed to fetch sections: ${err.message}`);
+    logger.error(`[Plex] Failed to fetch sections: ${err.message}`);
     return [];
   }
 }
@@ -148,7 +149,7 @@ export async function getPlexPin(): Promise<{ id: number; code: string }> {
     });
     return { id: res.data.id, code: res.data.code };
   } catch (err: any) {
-    console.error(`[Plex] Failed to get PIN: ${err.message}`);
+    logger.error(`[Plex] Failed to get PIN: ${err.message}`);
     throw err;
   }
 }
@@ -160,11 +161,11 @@ export async function getPlexToken(pinId: number): Promise<string | null> {
     });
     const token = res.data.authToken || null;
     if (token) {
-      console.log(`[Plex] Token retrieved for PIN ${pinId}`);
+      logger.info(`[Plex] Token retrieved for PIN ${pinId}`);
     }
     return token;
   } catch (err: any) {
-    console.error(`[Plex] Failed to get token for PIN ${pinId}: ${err.message}`);
+    logger.error(`[Plex] Failed to get token for PIN ${pinId}: ${err.message}`);
     return null;
   }
 }
@@ -180,7 +181,7 @@ export async function getPlexResources(token: string): Promise<any[]> {
     // Filter only for servers
     return (res.data || []).filter((r: any) => r.provides?.includes('server'));
   } catch (err: any) {
-    console.error(`[Plex] Failed to get resources: ${err.message}`);
+    logger.error(`[Plex] Failed to get resources: ${err.message}`);
     return [];
   }
 }
@@ -196,7 +197,7 @@ export async function getPlexUsers(): Promise<string[]> {
     const users = res.data.users || [];
     return users.map((u: any) => u.username || u.title || u.friendlyName);
   } catch (err: any) {
-    console.error(`[Plex] Failed to fetch users: ${err.message}`);
+    logger.error(`[Plex] Failed to fetch users: ${err.message}`);
     return [];
   }
 }
@@ -290,7 +291,7 @@ export async function getPlexFavorites(includeUsers?: string[]): Promise<Favorit
 
     return Array.from(favMap.values());
   } catch (err: any) {
-    console.error(`[Plex] Failed to fetch favorites: ${err.message}`);
+    logger.error(`[Plex] Failed to fetch favorites: ${err.message}`);
     return [];
   }
 }

@@ -1,6 +1,7 @@
 import { StorageConfig } from '../models';
 import { getRootFolders as getSonarrFolders } from './sonarr.service';
 import { getRootFolders as getRadarrFolders } from './radarr.service';
+import { logger } from '../logger';
 
 export async function getDiskStatus(storage: StorageConfig) {
   try {
@@ -38,7 +39,7 @@ export async function getDiskStatus(storage: StorageConfig) {
       freeBytes,
     };
   } catch (err: any) {
-    console.error(`Failed to get disk status for storage ${storage.name}:`, err.message);
+    logger.error(`Failed to get disk status for storage ${storage.name}:`, err.message);
     return {
       storageId: storage.id,
       name: storage.name,

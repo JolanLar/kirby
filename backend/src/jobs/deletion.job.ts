@@ -55,6 +55,10 @@ function isDryRunEnabled(): boolean {
   return ['1', 'true', 'yes', 'on'].includes(String(process.env.DRY_RUN || '').toLowerCase());
 }
 
+function debugObject(label: string, value: unknown) {
+  logger.debug(`${label}: ${JSON.stringify(value, null, 2)}`);
+}
+
 export function getDeletionJobStatus() {
   return {
     intervalMinutes: getDeletionIntervalMinutes(),
@@ -297,32 +301,92 @@ export async function processDeletion() {
 }
 
 export async function deleteItem(item: MediaItem) {
-      if (isDryRunEnabled()) {
+      const dryRun = isDryRunEnabled();
+      logger.info(`${dryRun ? '[Dry Run]' : '[Delete]'} Building deletion plan for ${item.type}: ${item.title} (tmdbId: ${item.tmdbId})`);
+      debugObject('[Delete] Media entry selected from queue', {
+        title: item.title,
+        type: item.type,
+        tmdbId: item.tmdbId,
+        plexId: item.plexId,
+        jellyfinId: item.jellyfinId,
+        lastSeenAt: item.lastSeenAt,
+        lastSeenAtIso: item.lastSeenAt ? new Date(item.lastSeenAt).toISOString() : null,
+        sizeOnDisk: item.sizeOnDisk,
+        plexPath: item.plexPath,
+        jellyfinPath: item.jellyfinPath,
+        source: item.source,
+      });
+      if (item.jellyfinId) {
+        debugObject('[Delete] Matching Jellyfin entry', {
+          jellyfinId: item.jellyfinId,
+          title: item.title,
+          type: item.type,
+          tmdbId: item.tmdbId,
+          path: item.jellyfinPath,
+          lastSeenAt: item.lastSeenAt,
+          lastSeenAtIso: item.lastSeenAt ? new Date(item.lastSeenAt).toISOString() : null,
+          posterUrl: item.posterUrl,
+          sizeOnDisk: item.sizeOnDisk,
+        });
+      }
+      if (item.plexId) {
+        debugObject('[Delete] Matching Plex entry', {
+          plexId: item.plexId,
+          title: item.title,
+          type: item.type,
+          tmdbId: item.tmdbId,
+          path: item.plexPath,
+          lastSeenAt: item.lastSeenAt,
+          lastSeenAtIso: item.lastSeenAt ? new Date(item.lastSeenAt).toISOString() : null,
+          posterUrl: item.posterUrl,
+          sizeOnDisk: item.sizeOnDisk,
+        });
+      }
+
+      let arrEntry: any;
+      let hashes: string[] = [];
+      if (item.type === 'show') {
+        const serie = await searchSonarrSerie(item);
+        if (serie) {
+          arrEntry = serie;
+          debugObject('[Delete] Matching Sonarr entry', serie);
+          hashes = await getDownloadIdsFromSonarr(serie);
+          logger.debug(`[Delete] Sonarr download hashes for ${item.title}: ${hashes.join(', ') || 'none'}`);
+        }
+      } else {
+        const movie = await searchRadarrMovie(item);
+        if (movie) {
+          arrEntry = movie;
+          debugObject('[Delete] Matching Radarr entry', movie);
+          hashes = await getDownloadIdsFromRadarr(movie);
+          logger.debug(`[Delete] Radarr download hashes for ${item.title}: ${hashes.join(', ') || 'none'}`);
+        }
+      }
+
+      const linkedHashes = await findLinkedTorrentHashes(hashes);
+      const selectedHashes = [...hashes, ...linkedHashes];
+      logger.info(`${dryRun ? '[Dry Run]' : '[Delete]'} qBittorrent hashes selected for ${item.title}: ${selectedHashes.join(', ') || 'none'}`);
+      debugObject('[Delete] Matching qBittorrent torrents', {
+        originalHashes: hashes,
+        linkedHashes,
+        selectedHashes,
+      });
+
+      if (dryRun) {
         logger.info(`[Dry Run] Would delete ${item.type}: ${item.title}`);
         recordDeletion(item);
         return true;
       }
 
-      logger.info(`[Delete] Starting deletion for ${item.type}: ${item.title} (tmdbId: ${item.tmdbId})`);
       if (item.type === 'show') {
-        const serie = await searchSonarrSerie(item);
-        if (serie) {
-          const hashes = await getDownloadIdsFromSonarr(serie);
-          logger.debug(`[Delete] Sonarr download hashes for ${item.title}: ${hashes.join(', ') || 'none'}`);
-          const linkedHashes = await findLinkedTorrentHashes(hashes);
-          logger.info(`[Delete] qBittorrent hashes selected for ${item.title}: ${[...hashes, ...linkedHashes].join(', ') || 'none'}`);
-          await deleteManyFromQBittorrent([...hashes, ...linkedHashes]);
-          await deleteShowFromSonarr(serie);
+        if (arrEntry) {
+          await deleteManyFromQBittorrent(selectedHashes);
+          await deleteShowFromSonarr(arrEntry);
         }
       } else {
-        const movie = await searchRadarrMovie(item);
-        if (movie) {
-          const hashes = await getDownloadIdsFromRadarr(movie);
-          logger.debug(`[Delete] Radarr download hashes for ${item.title}: ${hashes.join(', ') || 'none'}`);
-          const linkedHashes = await findLinkedTorrentHashes(hashes);
-          logger.info(`[Delete] qBittorrent hashes selected for ${item.title}: ${[...hashes, ...linkedHashes].join(', ') || 'none'}`);
-          await deleteManyFromQBittorrent([...hashes, ...linkedHashes]);
-          await deleteMovieFromRadarr(movie);
+        if (arrEntry) {
+          await deleteManyFromQBittorrent(selectedHashes);
+          await deleteMovieFromRadarr(arrEntry);
         }
       }
 

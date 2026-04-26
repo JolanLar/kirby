@@ -9,6 +9,12 @@ interface QBittorrentTorrent {
   name: string;
   size: number;
   total_size: number;
+  category?: string;
+  tags?: string;
+  tracker?: string;
+  content_path?: string;
+  root_path?: string;
+  save_path?: string;
 }
 
 interface QBittorrentFile {
@@ -104,6 +110,21 @@ async function getTorrents(config: QBittorrentConfig): Promise<QBittorrentTorren
   return await getQBittorrent<QBittorrentTorrent[]>(config, '/api/v2/torrents/info') || [];
 }
 
+function summarizeTorrent(torrent: QBittorrentTorrent) {
+  return {
+    name: torrent.name,
+    hash: torrent.hash,
+    size: torrent.size,
+    total_size: torrent.total_size,
+    category: torrent.category,
+    tags: torrent.tags,
+    tracker: torrent.tracker,
+    content_path: torrent.content_path,
+    root_path: torrent.root_path,
+    save_path: torrent.save_path,
+  };
+}
+
 export async function findLinkedTorrentHashes(hashes: string[]): Promise<string[]> {
   const config = getQBittorrentConfig();
   if (!config) return [];
@@ -120,6 +141,7 @@ export async function findLinkedTorrentHashes(hashes: string[]): Promise<string[
     const torrentsByHash = new Map(torrents.map(torrent => [torrent.hash.toLowerCase(), torrent]));
     const originalHashSet = new Set(originalHashes.map(hash => hash.toLowerCase()));
     const linkedHashes = new Set<string>();
+    const linkedTorrents: QBittorrentTorrent[] = [];
 
     for (const hash of originalHashes) {
       const original = torrentsByHash.get(hash.toLowerCase());
@@ -131,6 +153,7 @@ export async function findLinkedTorrentHashes(hashes: string[]): Promise<string[
       const originalManifest = await getTorrentManifest(config, original.hash);
       if (!originalManifest) continue;
       logger.debug(`[QBittorrent] Matching manifest for ${original.name} (${original.hash}, ${original.total_size} bytes).`);
+      logger.debug(`[QBittorrent] Original torrent entry: ${JSON.stringify(summarizeTorrent(original), null, 2)}`);
 
       for (const candidate of torrents) {
         if (originalHashSet.has(candidate.hash.toLowerCase())) continue;
@@ -139,7 +162,9 @@ export async function findLinkedTorrentHashes(hashes: string[]): Promise<string[
         const candidateManifest = await getTorrentManifest(config, candidate.hash);
         if (candidateManifest === originalManifest) {
           linkedHashes.add(candidate.hash);
+          linkedTorrents.push(candidate);
           logger.debug(`[QBittorrent] Linked cross-seed match: ${candidate.name} (${candidate.hash}).`);
+          logger.debug(`[QBittorrent] Linked torrent entry: ${JSON.stringify(summarizeTorrent(candidate), null, 2)}`);
         }
       }
     }
@@ -147,6 +172,7 @@ export async function findLinkedTorrentHashes(hashes: string[]): Promise<string[
     const result = [...linkedHashes];
     if (result.length > 0) {
       logger.info(`[QBittorrent] Found linked cross-seed torrents: ${result.join(', ')}`);
+      logger.debug(`[QBittorrent] Linked torrent entries: ${JSON.stringify(linkedTorrents.map(summarizeTorrent), null, 2)}`);
     }
     return result;
   } catch (err: any) {

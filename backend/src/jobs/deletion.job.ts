@@ -3,7 +3,7 @@ import { getPlexItems, deletePlexItem, getPlexFavorites, getPlexMachineId } from
 import { getJellyfinItems, deleteJellyfinItem, getJellyfinFavorites } from '../services/jellyfin.service';
 import { deleteMovieFromRadarr, getMoviesFromRadarr, searchRadarrMovie, getDownloadIdsFromRadarr } from '../services/radarr.service';
 import { deleteShowFromSonarr, getShowsFromSonarr, searchSonarrSerie, getDownloadIdsFromSonarr } from '../services/sonarr.service';
-import { deleteFromQBittorrent } from '../services/qbittorrent.service';
+import { deleteManyFromQBittorrent, findLinkedTorrentHashes } from '../services/qbittorrent.service';
 import { isExcluded, getStorages, recordDeletion, getDeleteHistoryCounts, getSetting, addExclusion, isFavoritedAndNotIgnored, upsertFavorite, removeStaleFavorites, updateFavoriteLastSeen } from '../db';
 import { MediaItem } from '../models';
 
@@ -306,14 +306,16 @@ export async function deleteItem(item: MediaItem) {
         const serie = await searchSonarrSerie(item);
         if (serie) {
           const hashes = await getDownloadIdsFromSonarr(serie);
-          await Promise.all(hashes.map(hash => deleteFromQBittorrent(hash)));
+          const linkedHashes = await findLinkedTorrentHashes(hashes);
+          await deleteManyFromQBittorrent([...hashes, ...linkedHashes]);
           await deleteShowFromSonarr(serie);
         }
       } else {
         const movie = await searchRadarrMovie(item);
         if (movie) {
           const hashes = await getDownloadIdsFromRadarr(movie);
-          await Promise.all(hashes.map(hash => deleteFromQBittorrent(hash)));
+          const linkedHashes = await findLinkedTorrentHashes(hashes);
+          await deleteManyFromQBittorrent([...hashes, ...linkedHashes]);
           await deleteMovieFromRadarr(movie);
         }
       }

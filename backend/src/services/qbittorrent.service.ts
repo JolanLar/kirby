@@ -3,6 +3,24 @@ import { getSetting } from '../db';
 
 let qbCookie: string | null = null;
 
+interface QBittorrentTorrent {
+  hash: string;
+  name: string;
+  size: number;
+  total_size: number;
+}
+
+interface QBittorrentFile {
+  name: string;
+  size: number;
+}
+
+interface QBittorrentConfig {
+  url: string;
+  user: string;
+  pass: string;
+}
+
 async function authQBittorrent(url: string, user: string, pass: string): Promise<boolean> {
   try {
     const res = await axios.post(`${url}/api/v2/auth/login`, `username=${encodeURIComponent(user)}&password=${encodeURIComponent(pass)}`, {
@@ -22,26 +40,127 @@ async function authQBittorrent(url: string, user: string, pass: string): Promise
   }
 }
 
-export async function deleteFromQBittorrent(hash: string): Promise<boolean> {
+function getQBittorrentConfig(): QBittorrentConfig | null {
   const url = getSetting('qbUrl');
   const user = getSetting('qbUser');
   const pass = getSetting('qbPass');
 
   if (!url) {
     console.log('[QBittorrent] Not configured.');
-    return false;
+    return null;
   }
 
-  // Attempt to auth if not logged in
+  return { url, user, pass };
+}
+
+async function ensureQBittorrentAuth(config: QBittorrentConfig): Promise<boolean> {
   if (!qbCookie) {
-    const ok = await authQBittorrent(url, user, pass);
+    const ok = await authQBittorrent(config.url, config.user, config.pass);
     if (!ok) return false;
   }
+  return true;
+}
+
+async function getQBittorrent<T>(config: QBittorrentConfig, path: string): Promise<T | null> {
+  if (!await ensureQBittorrentAuth(config)) return null;
+
+  try {
+    const res = await axios.get<T>(`${config.url}${path}`, {
+      headers: { 'Cookie': qbCookie }
+    });
+    return res.data;
+  } catch (err: any) {
+    console.error(`[QBittorrent] Error fetching ${path}: ${err.message}`);
+    return null;
+  }
+}
+
+function normalizeTorrentFiles(files: QBittorrentFile[]): string | null {
+  if (files.length === 0) return null;
+
+  const paths = files.map(file => String(file.name || '').replace(/\\/g, '/').replace(/^\/+/, ''));
+  const partsList = paths.map(path => path.split('/').filter(Boolean));
+  const firstTopFolder = partsList[0]?.[0];
+  const dropTopFolder = !!firstTopFolder && partsList.every(parts => parts.length > 1 && parts[0] === firstTopFolder);
+
+  return files
+    .map((file, index) => {
+      const parts = partsList[index];
+      const relativePath = (dropTopFolder ? parts.slice(1) : parts).join('/');
+      return `${relativePath}\t${file.size}`;
+    })
+    .sort()
+    .join('\n');
+}
+
+async function getTorrentManifest(config: QBittorrentConfig, hash: string): Promise<string | null> {
+  const files = await getQBittorrent<QBittorrentFile[]>(config, `/api/v2/torrents/files?hash=${encodeURIComponent(hash)}`);
+  if (!files) return null;
+  return normalizeTorrentFiles(files);
+}
+
+async function getTorrents(config: QBittorrentConfig): Promise<QBittorrentTorrent[]> {
+  return await getQBittorrent<QBittorrentTorrent[]>(config, '/api/v2/torrents/info') || [];
+}
+
+export async function findLinkedTorrentHashes(hashes: string[]): Promise<string[]> {
+  const config = getQBittorrentConfig();
+  if (!config) return [];
+
+  const originalHashes = [...new Set(hashes.filter(Boolean))];
+  if (originalHashes.length === 0) return [];
+
+  try {
+    const torrents = await getTorrents(config);
+    if (torrents.length === 0) return [];
+
+    const torrentsByHash = new Map(torrents.map(torrent => [torrent.hash.toLowerCase(), torrent]));
+    const originalHashSet = new Set(originalHashes.map(hash => hash.toLowerCase()));
+    const linkedHashes = new Set<string>();
+
+    for (const hash of originalHashes) {
+      const original = torrentsByHash.get(hash.toLowerCase());
+      if (!original) {
+        console.log(`[QBittorrent] Torrent ${hash} not found while looking for linked cross-seeds.`);
+        continue;
+      }
+
+      const originalManifest = await getTorrentManifest(config, original.hash);
+      if (!originalManifest) continue;
+
+      for (const candidate of torrents) {
+        if (originalHashSet.has(candidate.hash.toLowerCase())) continue;
+        if (candidate.total_size !== original.total_size) continue;
+
+        const candidateManifest = await getTorrentManifest(config, candidate.hash);
+        if (candidateManifest === originalManifest) linkedHashes.add(candidate.hash);
+      }
+    }
+
+    const result = [...linkedHashes];
+    if (result.length > 0) {
+      console.log(`[QBittorrent] Found linked cross-seed torrents: ${result.join(', ')}`);
+    }
+    return result;
+  } catch (err: any) {
+    console.error(`[QBittorrent] Error finding linked torrents: ${err.message}`);
+    return [];
+  }
+}
+
+export async function deleteManyFromQBittorrent(hashes: string[]): Promise<boolean> {
+  const config = getQBittorrentConfig();
+  if (!config) return false;
+
+  const uniqueHashes = [...new Set(hashes.filter(hash => hash && hash !== 'all'))];
+  if (uniqueHashes.length === 0) return false;
+
+  if (!await ensureQBittorrentAuth(config)) return false;
 
   try {    
-    console.log(`[QBittorrent] Deleting torrent ${hash}...`);
+    console.log(`[QBittorrent] Deleting torrents ${uniqueHashes.join(', ')}...`);
     // Delete torrent and files (deleteFiles=true)
-    await axios.post(`${url}/api/v2/torrents/delete`, `hashes=${hash}&deleteFiles=true`, {
+    await axios.post(`${config.url}/api/v2/torrents/delete`, `hashes=${uniqueHashes.map(encodeURIComponent).join('|')}&deleteFiles=true`, {
       headers: {
         'Cookie': qbCookie,
         'Content-Type': 'application/x-www-form-urlencoded'
@@ -52,4 +171,8 @@ export async function deleteFromQBittorrent(hash: string): Promise<boolean> {
     console.error(`[QBittorrent] Error deleting torrent: ${err.message}`);
     return false;
   }
+}
+
+export async function deleteFromQBittorrent(hash: string): Promise<boolean> {
+  return deleteManyFromQBittorrent([hash]);
 }

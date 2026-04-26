@@ -28,6 +28,13 @@ interface QBittorrentConfig {
   pass: string;
 }
 
+function qbHeaders(contentType?: string): Record<string, string> {
+  const headers: Record<string, string> = {};
+  if (qbCookie) headers.Cookie = qbCookie;
+  if (contentType) headers['Content-Type'] = contentType;
+  return headers;
+}
+
 async function authQBittorrent(url: string, user: string, pass: string): Promise<boolean> {
   try {
     const res = await axios.post(`${url}/api/v2/auth/login`, `username=${encodeURIComponent(user)}&password=${encodeURIComponent(pass)}`, {
@@ -61,6 +68,10 @@ function getQBittorrentConfig(): QBittorrentConfig | null {
 }
 
 async function ensureQBittorrentAuth(config: QBittorrentConfig): Promise<boolean> {
+  if (!config.user && !config.pass) {
+    logger.debug('[QBittorrent] No credentials configured; using qBittorrent without auth cookie.');
+    return true;
+  }
   if (!qbCookie) {
     const ok = await authQBittorrent(config.url, config.user, config.pass);
     if (!ok) return false;
@@ -73,7 +84,7 @@ async function getQBittorrent<T>(config: QBittorrentConfig, path: string): Promi
 
   try {
     const res = await axios.get<T>(`${config.url}${path}`, {
-      headers: { 'Cookie': qbCookie }
+      headers: qbHeaders()
     });
     return res.data;
   } catch (err: any) {
@@ -194,10 +205,7 @@ export async function deleteManyFromQBittorrent(hashes: string[]): Promise<boole
     logger.info(`[QBittorrent] Deleting torrents ${uniqueHashes.join(', ')}...`);
     // Delete torrent and files (deleteFiles=true)
     await axios.post(`${config.url}/api/v2/torrents/delete`, `hashes=${uniqueHashes.map(encodeURIComponent).join('|')}&deleteFiles=true`, {
-      headers: {
-        'Cookie': qbCookie,
-        'Content-Type': 'application/x-www-form-urlencoded'
-      }
+      headers: qbHeaders('application/x-www-form-urlencoded')
     });
     return true;
   } catch (err: any) {

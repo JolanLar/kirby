@@ -74,8 +74,21 @@ export async function getDownloadIdsFromSonarr(serie: SonarrSeries): Promise<str
       headers: { 'X-Api-Key': apiKey }
     });
     const res = await client.get(`/api/v3/history/series?seriesId=${serie.id}`);
-    const episodes = res.data.episodes;
-    return [...new Set(episodes.map((e: any) => e.downloadId).filter((id: string) => id))] as string[];
+    const history = Array.isArray(res.data)
+      ? res.data
+      : Array.isArray(res.data?.records)
+        ? res.data.records
+        : Array.isArray(res.data?.episodes)
+          ? res.data.episodes
+          : [];
+
+    if (history.length === 0) {
+      logger.debug(`[Sonarr] No history records found for serie ${serie.title} (ID: ${serie.id}).`);
+    } else {
+      logger.debug(`[Sonarr] Loaded ${history.length} history records for serie ${serie.title} (ID: ${serie.id}).`);
+    }
+
+    return [...new Set(history.map((h: any) => h.downloadId || h.data?.torrentInfoHash).filter((id: string) => id))] as string[];
   } catch (err: any) {
     logger.error(`[Sonarr] Error getting download ID: ${err.message}`);
     return [];

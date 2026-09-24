@@ -2,10 +2,27 @@ import { createJellyfinClient } from './jellyfin-api';
 import { getSetting } from '../db';
 import { MediaItem } from '../models';
 import { logger } from '../logger';
+import { getPlaybackActivityDates } from './jellyfin-playback-reporting';
 
 function buildJellyfinPosterUrl(baseUrl: string, itemId: string, width = 342, quality = 70) {
   const normalizedBase = baseUrl.replace(/\/$/, '');
   return `${normalizedBase}/Items/${itemId}/Images/Primary?maxWidth=${width}&quality=${quality}`;
+}
+
+export function mergePlaybackActivityItems(
+  itemsMap: Map<string, MediaItem>,
+  seriesMap: Map<string, string>,
+  playbackDates: Map<string, number>,
+  activityItems: any[],
+): void {
+  for (const item of activityItems) {
+    const normalizedId = String(item.Id || '').replace(/-/g, '').toLowerCase();
+    const lastPlayed = playbackDates.get(normalizedId) || 0;
+    const tmdbId = item.Type === 'Episode' ? seriesMap.get(item.SeriesId) : item.ProviderIds?.Tmdb || '';
+    const type = item.Type === 'Episode' ? 'show' : 'movie';
+    const existing = itemsMap.get(type + '-' + tmdbId);
+    if (existing && lastPlayed > existing.lastSeenAt) existing.lastSeenAt = lastPlayed;
+  }
 }
 
 async function getAllUsersItems(client: any): Promise<MediaItem[]> {
@@ -62,6 +79,32 @@ async function getAllUsersItems(client: any): Promise<MediaItem[]> {
       logger.error(`[Jellyfin] Failed to fetch played items for user ${user.Id}: ${e.message}`);
     }
   }));
+
+  // Jellyfin's UserData.LastPlayedDate can remain stale after a replay. When
+  // Playback Reporting is installed, merge its actual playback events as a
+  // more reliable source while preserving DateCreated as the baseline.
+  const playbackDates = await getPlaybackActivityDates(client);
+  const playbackItemIds = Array.from(playbackDates.keys());
+  const batchSize = 100;
+
+  for (let offset = 0; offset < playbackItemIds.length; offset += batchSize) {
+    const ids = playbackItemIds.slice(offset, offset + batchSize);
+    try {
+      const activityItemsRes = await client.get('/Items', {
+        params: {
+          Ids: ids.join(','),
+          IncludeItemTypes: 'Movie,Episode',
+          Fields: 'ProviderIds,SeriesId',
+          Recursive: true,
+          UserId: adminUser.Id,
+        },
+      });
+
+      mergePlaybackActivityItems(itemsMap, seriesMap, playbackDates, activityItemsRes.data.Items || []);
+    } catch (e: any) {
+      logger.error(`[Jellyfin] Failed to resolve Playback Reporting items: ${e.message}`);
+    }
+  }
 
   return Array.from(itemsMap.values()).sort((a, b) => a.lastSeenAt - b.lastSeenAt);
 }

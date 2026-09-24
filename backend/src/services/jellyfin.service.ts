@@ -1,4 +1,4 @@
-import axios from 'axios';
+import { createJellyfinClient } from './jellyfin-api';
 import { getSetting } from '../db';
 import { MediaItem } from '../models';
 import { logger } from '../logger';
@@ -76,13 +76,7 @@ export async function getJellyfinItems(): Promise<MediaItem[]> {
   }
 
   try {
-    const client = axios.create({
-      baseURL: url,
-      headers: {
-        'Authorization': `MediaBrowser Token="${apiKey}"`,
-        'Accept': 'application/json'
-      }
-    });
+    const client = createJellyfinClient(url, apiKey);
 
     return await getAllUsersItems(client);
   } catch (err: any) {
@@ -101,13 +95,7 @@ export async function deleteJellyfinItem(itemId: string): Promise<boolean> {
   }
 
   try {
-    const client = axios.create({
-      baseURL: url,
-      headers: {
-        'Authorization': `MediaBrowser Token="${apiKey}"`,
-        'Accept': 'application/json'
-      }
-    });
+    const client = createJellyfinClient(url, apiKey);
 
     logger.info(`[Jellyfin] Deleting item (ID: ${itemId})...`);
     await client.delete(`/Items/${itemId}`);
@@ -124,13 +112,7 @@ export async function getJellyfinPaths(url: string = getSetting('jellyfinUrl'), 
   }
 
   try {
-    const client = axios.create({
-      baseURL: url,
-      headers: {
-        'Authorization': `MediaBrowser Token="${apiKey}"`,
-        'Accept': 'application/json'
-      }
-    });
+    const client = createJellyfinClient(url, apiKey);
 
     const res = await client.get('/Library/VirtualFolders');
     const folders = res.data || [];
@@ -159,10 +141,7 @@ export async function getJellyfinUsers(): Promise<string[]> {
   const apiKey = getSetting('jellyfinApiKey');
   if (!url || !apiKey) return [];
   try {
-    const client = axios.create({
-      baseURL: url,
-      headers: { 'Authorization': `MediaBrowser Token="${apiKey}"`, 'Accept': 'application/json' }
-    });
+    const client = createJellyfinClient(url, apiKey);
     const res = await client.get('/Users');
     return (res.data || []).map((u: any) => u.Name);
   } catch (err: any) {
@@ -186,10 +165,7 @@ export async function getJellyfinFavorites(includeUsers?: string[]): Promise<Jel
   if (!url || !apiKey) return [];
 
   try {
-    const client = axios.create({
-      baseURL: url,
-      headers: { 'Authorization': `MediaBrowser Token="${apiKey}"`, 'Accept': 'application/json' }
-    });
+    const client = createJellyfinClient(url, apiKey);
 
     const usersRes = await client.get('/Users');
     let users: any[] = usersRes.data || [];

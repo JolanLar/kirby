@@ -23,7 +23,10 @@ Kirby is a centralized deletion and exclusion manager for home media setups. It 
 
 ## ⚙️ How it works
 
-1. Kirby fetches your watch history from Plex and/or Jellyfin.
+1. Kirby fetches your watch history from Plex and/or Jellyfin. When Jellyfin's
+   **Playback Reporting** plugin is enabled, Kirby also merges its playback
+   events so replays and partially watched episodes are not missed when
+   `UserData.LastPlayedDate` is stale.
 2. It cross-references items against Radarr (movies) and Sonarr (shows) to get file paths and sizes.
 3. Items are ranked by a combination of last-seen date and storage impact.
 4. When free space on a configured storage falls below your target, the deletion job removes the lowest-ranked eligible items via Radarr/Sonarr (and optionally qBittorrent).

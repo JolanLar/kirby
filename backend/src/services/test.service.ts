@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { createJellyfinClient } from './jellyfin-api';
 
 export async function testConnection(service: string, config: any): Promise<{ success: boolean; error?: string }> {
   try {
@@ -15,13 +16,8 @@ export async function testConnection(service: string, config: any): Promise<{ su
     }
     
     if (service === 'jellyfin') {
-      const res = await axios.get(`${config.url}/System/Info`, {
-        headers: {
-          'Authorization': `MediaBrowser Token="${config.apiKey}"`,
-          'Accept': 'application/json'
-        },
-        timeout: 5000
-      });
+      const client = createJellyfinClient(config.url, config.apiKey, 5000);
+      const res = await client.get('/System/Info');
       if (res.status === 200) return { success: true };
     }
     
